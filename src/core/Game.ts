@@ -1,0 +1,203 @@
+import * as THREE from 'three';
+import { CONFIG, COLORS } from '../config';
+import { GameState } from './GameState';
+import { InputManager } from './InputManager';
+import { World, Interactable } from '../world/World';
+import { LightExposureSystem } from '../lighting/LightExposureSystem';
+import { Player } from '../player/Player';
+import { EnemyManager } from '../enemies/EnemyManager';
+import { ObjectiveManager } from '../gameplay/ObjectiveManager';
+import { AudioManager } from '../audio/AudioManager';
+import { UI } from '../ui/UI';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { Progression, UpgradeId } from '../gameplay/Progression';
+import { LootSystem } from '../gameplay/LootSystem';
+
+export class Game {
+  private readonly scene = new THREE.Scene();
+  private readonly camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 140);
+  private readonly renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  private readonly composer: EffectComposer;
+  private readonly clock = new THREE.Clock();
+  private readonly exposure = new LightExposureSystem();
+  private readonly progression = new Progression();
+  private readonly ui = new UI();
+  private readonly input: InputManager;
+  private readonly world: World;
+  private readonly player: Player;
+  private readonly enemies: EnemyManager;
+  private readonly loot: LootSystem;
+  private readonly objectives = new ObjectiveManager();
+  private readonly audio = new AudioManager();
+  private state = GameState.MENU;
+  private raf = 0;
+  private playTime = 0;
+  private lastFlashlightState = true;
+  private nearby?: Interactable;
+  private readonly raycaster = new THREE.Raycaster();
+  private shotEffects: { line: THREE.Line; light: THREE.PointLight; life: number }[] = [];
+  private zombieVoiceTimer = 4;
+  onRestartRequested?: (startImmediately: boolean) => void;
+
+  constructor() {
+    this.scene.background = new THREE.Color(COLORS.night);
+    this.scene.fog = new THREE.FogExp2(COLORS.fog, CONFIG.world.fogDensity);
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.65));
+    this.renderer.setSize(innerWidth, innerHeight);
+    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.28;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.ui.canvasHost.appendChild(this.renderer.domElement);
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.setPixelRatio(Math.min(devicePixelRatio, 1.65));
+    this.composer.setSize(innerWidth, innerHeight);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.24, 0.82));
+    this.composer.addPass(new OutputPass());
+    this.input = new InputManager(this.renderer.domElement);
+    this.input.onUnlock = () => { if (this.state === GameState.PLAYING) this.pause(); };
+    this.setupBaseLights();
+    this.world = new World(this.scene, this.exposure);
+    this.player = new Player(this.scene, this.camera, this.world.collisions, this.exposure, this.progression);
+    this.enemies = new EnemyManager(this.scene, this.world.spawnPoints, this.world.shadowTriggers, this.exposure, this.world.collisions);
+    this.loot = new LootSystem(this.scene, this.progression);
+    this.bindEvents();
+    this.ui.setState(this.state);
+    this.ui.updateProgression(this.progression);
+    window.addEventListener('resize', this.resize);
+    this.raf = requestAnimationFrame(this.loop);
+  }
+
+  private setupBaseLights() {
+    const hemi = new THREE.HemisphereLight(0x7296b8, 0x171510, 1.28); this.scene.add(hemi);
+    const moon = new THREE.DirectionalLight(COLORS.moon, 2.7); moon.position.set(-22, 38, 18); moon.castShadow = true;
+    moon.shadow.mapSize.set(1024, 1024); moon.shadow.camera.left = -43; moon.shadow.camera.right = 43; moon.shadow.camera.top = 43; moon.shadow.camera.bottom = -43;
+    this.scene.add(moon);
+  }
+
+  private bindEvents() {
+    this.ui.onStart = () => this.start();
+    this.ui.onResume = () => this.resume();
+    this.ui.onRestart = () => this.onRestartRequested?.(true);
+    this.ui.onMenu = () => this.onRestartRequested?.(false);
+    this.ui.onPurchase = (id: UpgradeId) => {
+      if (this.progression.purchase(id)) { this.player.applyUpgrades(); this.audio.pickup(); }
+      this.ui.updateProgression(this.progression);
+    };
+    this.objectives.onUpdate = (title, detail) => this.ui.notify(title, detail);
+    this.enemies.onShadowWarning = () => { this.audio.warning(); this.ui.notify('SOMETHING STIRS', 'Keep your light trained on the darkness'); };
+    this.enemies.onPlayerHit = () => { this.ui.damageFlash(); this.audio.zombieAttack(); };
+    this.enemies.onZombieKilled = (zombie, headshot) => {
+      this.loot.spawn(zombie.object.position.clone()); this.audio.zombieDie();
+      if (headshot) this.ui.notify('HEADSHOT', 'Infected neutralized');
+    };
+    this.loot.onPickup = (kind, value) => {
+      this.audio.pickup(); this.ui.updateProgression(this.progression);
+      const label = kind === 'coin' ? `${value} coin${value === 1 ? '' : 's'}` : kind === 'battery' ? `${value} laser cells` : `${value} health`;
+      this.ui.notify('LOOT RECOVERED', `+${label}`);
+    };
+  }
+
+  private start() {
+    this.state = GameState.PLAYING; this.ui.setState(this.state); this.audio.resume(); this.renderer.domElement.requestPointerLock?.();
+    this.ui.showTutorial(); this.ui.notify('OBJECTIVE UPDATED', 'Find 3 Power Fuses');
+  }
+  begin() { this.start(); }
+  private resume() { this.state = GameState.PLAYING; this.ui.setState(this.state); this.clock.getDelta(); this.renderer.domElement.requestPointerLock?.(); }
+  private pause() { if (this.state !== GameState.PLAYING) return; this.state = GameState.PAUSED; document.exitPointerLock?.(); this.input.clear(); this.ui.setState(this.state); }
+
+  private interact(item: Interactable) {
+    if (!item.active) return;
+    if (item.kind === 'fuse') { item.active = false; item.object.visible = false; this.objectives.collectFuse(); this.audio.pickup(); }
+    else if (item.kind === 'battery') { item.active = false; item.object.visible = false; this.player.addEnergy(15); this.player.battery = Math.min(100, this.player.battery + 12); this.audio.pickup(); this.ui.notify('ENERGY CELL RECOVERED', '+15 laser cells · +12 flashlight charge'); }
+    else if (item.kind === 'medkit') { item.active = false; item.object.visible = false; this.player.heal(35); this.audio.pickup(); this.ui.notify('MEDICAL SUPPLIES', '+35 health'); }
+    else if (item.kind === 'breaker') { item.onInteract?.(); item.active = false; this.audio.power(); this.ui.notify('FLOOD LIGHT ONLINE', 'A temporary safe route is active'); }
+    else if (item.kind === 'generator') {
+      if (this.objectives.stage !== 'GENERATOR') { this.ui.notify('GENERATOR OFFLINE', this.objectives.fuses < 3 ? `Requires ${3 - this.objectives.fuses} more power fuse${3 - this.objectives.fuses === 1 ? '' : 's'}` : 'No response'); return; }
+      item.active = false; this.world.activatePower(); this.objectives.restorePower(); this.audio.power(); this.audio.startHum();
+    } else if (item.kind === 'gate') {
+      if (this.objectives.stage !== 'GATE') { this.ui.notify('GATE OFFLINE', 'Restore district power first'); return; }
+      this.world.openGate(); item.active = false; this.audio.power(); this.ui.notify('GATE OPENING', 'Enter the illuminated evacuation zone');
+    }
+  }
+
+  private fireLaser() {
+    if (!this.player.fire()) return;
+    this.audio.fire(); this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera); this.raycaster.far = 52;
+    const targets = this.enemies.alive.map((zombie) => zombie.object);
+    const hits = this.raycaster.intersectObjects(targets, true);
+    const end = this.raycaster.ray.origin.clone().addScaledVector(this.raycaster.ray.direction, 52);
+    let confirmed = false; let headshot = false;
+    if (hits.length) {
+      const hit = hits[0]; end.copy(hit.point);
+      let node: THREE.Object3D | null = hit.object; let zombie = this.enemies.alive.find((candidate) => candidate.object === node);
+      while (!zombie && node?.parent) { node = node.parent; zombie = this.enemies.alive.find((candidate) => candidate.object === node); }
+      if (zombie) {
+        headshot = hit.point.y - zombie.object.position.y > 1.92;
+        zombie.takeDamage(this.player.laserDamage, headshot); confirmed = true; this.audio.impact();
+      }
+    }
+    const start = this.player.getMuzzleWorld();
+    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: headshot ? 0xffd34f : 0x38eaff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }));
+    const light = new THREE.PointLight(0x42e8ff, 5, 5); light.position.copy(start); this.scene.add(line, light); this.shotEffects.push({ line, light, life: 0.085 });
+    this.ui.shotFeedback(confirmed, headshot);
+  }
+
+  private updateShotEffects(dt: number) {
+    for (let index = this.shotEffects.length - 1; index >= 0; index--) {
+      const effect = this.shotEffects[index]; effect.life -= dt;
+      (effect.line.material as THREE.LineBasicMaterial).opacity = Math.max(0, effect.life / 0.085);
+      if (effect.life <= 0) { this.scene.remove(effect.line, effect.light); effect.line.geometry.dispose(); (effect.line.material as THREE.Material).dispose(); this.shotEffects.splice(index, 1); }
+    }
+  }
+
+  private updateInteraction() {
+    this.nearby = undefined; let nearest = 3.05;
+    for (const item of this.world.interactables) {
+      if (!item.active) continue; const distance = this.player.object.position.distanceTo(item.object.getWorldPosition(new THREE.Vector3()));
+      if (distance < nearest) { nearest = distance; this.nearby = item; }
+    }
+    if (this.nearby) {
+      let prompt = this.nearby.prompt;
+      if (this.nearby.kind === 'generator' && this.objectives.fuses < 3) prompt = `[E] Generator — ${this.objectives.fuses}/3 Fuses`;
+      this.ui.showPrompt(prompt); if (this.input.consume('KeyE')) this.interact(this.nearby);
+    } else this.ui.showPrompt();
+  }
+
+  private update(dt: number) {
+    const active = this.state === GameState.PLAYING;
+    if (this.input.consume('Escape')) { if (active) this.pause(); else if (this.state === GameState.PAUSED) this.resume(); }
+    this.player.update(dt, this.input, active);
+    this.world.update(active ? dt : 0);
+    this.enemies.update(dt, this.player, active);
+    this.loot.update(dt, this.player, active); this.updateShotEffects(dt);
+    if (!active) return;
+    if (this.input.down('Mouse0') || this.input.consume('Mouse0')) this.fireLaser();
+    this.zombieVoiceTimer -= dt;
+    if (this.zombieVoiceTimer <= 0) {
+      const near = this.enemies.alive.some((zombie) => zombie.object.position.distanceTo(this.player.object.position) < 13);
+      if (near) this.audio.zombieNear(); this.zombieVoiceTimer = near ? 4 + Math.random() * 4 : 2;
+    }
+    this.playTime += dt;
+    if (this.exposure.inSafeZone(this.player.object.position)) this.player.health = Math.min(100, this.player.health + dt * 1.8);
+    this.updateInteraction();
+    const playerExposure = this.exposure.exposureAt(this.player.object.position);
+    this.ui.update(this.player, this.objectives, playerExposure);
+    this.ui.updateProgression(this.progression);
+    if (this.lastFlashlightState !== this.player.flashlightOn) { this.audio.flashlight(); this.lastFlashlightState = this.player.flashlightOn; }
+    if (this.player.health <= 0) { this.state = GameState.GAME_OVER; document.exitPointerLock?.(); this.ui.setState(this.state); }
+    if (this.objectives.stage === 'GATE' && !this.world.interactables.find((i) => i.kind === 'gate')!.active && this.player.object.position.z < -40.2) {
+      this.objectives.escape(); this.state = GameState.VICTORY; document.exitPointerLock?.(); this.ui.setVictoryStats(this.playTime, this.player, this.enemies.stunnedTotal); this.ui.setState(this.state);
+    }
+  }
+
+  private loop = () => {
+    const dt = Math.min(this.clock.getDelta(), 0.05); this.update(dt); this.composer.render(); this.raf = requestAnimationFrame(this.loop);
+  };
+  private resize = () => { this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix(); this.renderer.setSize(innerWidth, innerHeight); this.composer.setSize(innerWidth, innerHeight); };
+  destroy() { cancelAnimationFrame(this.raf); this.input.destroy(); this.audio.destroy(); window.removeEventListener('resize', this.resize); this.renderer.dispose(); }
+}

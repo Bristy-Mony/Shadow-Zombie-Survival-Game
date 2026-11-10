@@ -1,0 +1,21 @@
+button:disabled { filter: grayscale(1); opacity: .42; cursor: not-allowed; transform: none; }
+.weapon-panel { position:absolute; right:32px; bottom:106px; width:210px; padding:12px 14px; background:rgba(3,13,18,.76); border-right:2px solid #35dcff; display:grid; grid-template-columns:1fr auto; font-size:11px; letter-spacing:.16em; }
+.weapon-panel strong { font-size:18px; color:#68eaff; }
+.weapon-panel .meter { grid-column:1/3; }
+.weapon-panel i { background:#35dcff; box-shadow:0 0 12px #20cceb; }
+.coin-panel { position:absolute; right:32px; top:104px; padding:7px 13px; background:rgba(3,13,18,.72); border-right:2px solid #f4c650; display:flex; gap:15px; align-items:center; font-size:10px; letter-spacing:.18em; }
+.coin-panel strong { font-size:20px; color:#ffd66e; }
+.crosshair.firing { transform:translate(-50%,-50%) scale(1.35); opacity:1; }
+.crosshair.confirmed i { background:#ff645d; box-shadow:0 0 7px #f33; }
+.crosshair.headshot i { background:#ffd45e; box-shadow:0 0 9px #ffb62d; }
+.shop-modal { width:min(920px,94vw); max-height:92vh; overflow:auto; }
+.shop-modal h2 { margin-bottom:10px; }
+.shop-balance { font-size:12px; letter-spacing:.18em; color:#8ea4a9; }
+.shop-balance b { font-size:24px; color:#ffd064; margin-left:8px; }
+.shop-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:20px 0; }
+.shop-grid article { padding:18px 13px; background:rgba(12,30,36,.8); border:1px solid #28454d; text-align:left; min-height:160px; }
+.shop-grid article.owned { border-color:#4b9b79; background:rgba(18,52,43,.65); }
+.shop-grid h3 { font:700 20px 'Barlow Condensed'; letter-spacing:.05em; margin:0; color:#e9f5f5; }
+.shop-grid p { font-size:13px; min-height:40px; margin:8px 0 12px; }
+.shop-grid button { min-width:0; width:100%; padding:10px; font-size:11px; margin:0; }
+@media(max-width:850px) { .shop-grid { grid-template-columns:repeat(2,1fr); } }
