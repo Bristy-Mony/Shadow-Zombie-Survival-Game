@@ -38,6 +38,10 @@ export class Game {
   private lastFlashlightState = true;
   private nearby?: Interactable;
   private readonly raycaster = new THREE.Raycaster();
+  private readonly shotOrigin = new THREE.Vector3();
+  private readonly shotDirection = new THREE.Vector3();
+  private readonly hitCenter = new THREE.Vector3();
+  private readonly hitOffset = new THREE.Vector3();
   private shotEffects: { line: THREE.Line; light: THREE.PointLight; life: number }[] = [];
   private zombieVoiceTimer = 4;
   onRestartRequested?: (startImmediately: boolean) => void;
@@ -45,14 +49,14 @@ export class Game {
   constructor() {
     this.scene.background = new THREE.Color(COLORS.night);
     this.scene.fog = new THREE.FogExp2(COLORS.fog, CONFIG.world.fogDensity);
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.65));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
     this.renderer.setSize(innerWidth, innerHeight);
     this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.28;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.ui.canvasHost.appendChild(this.renderer.domElement);
     this.composer = new EffectComposer(this.renderer);
-    this.composer.setPixelRatio(Math.min(devicePixelRatio, 1.65));
+    this.composer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
     this.composer.setSize(innerWidth, innerHeight);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.24, 0.82));
@@ -127,18 +131,28 @@ export class Game {
   private fireLaser() {
     if (!this.player.fire()) return;
     this.audio.fire(); this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera); this.raycaster.far = 52;
-    const targets = this.enemies.alive.map((zombie) => zombie.object);
-    const hits = this.raycaster.intersectObjects(targets, true);
-    const end = this.raycaster.ray.origin.clone().addScaledVector(this.raycaster.ray.direction, 52);
-    let confirmed = false; let headshot = false;
-    if (hits.length) {
-      const hit = hits[0]; end.copy(hit.point);
-      let node: THREE.Object3D | null = hit.object; let zombie = this.enemies.alive.find((candidate) => candidate.object === node);
-      while (!zombie && node?.parent) { node = node.parent; zombie = this.enemies.alive.find((candidate) => candidate.object === node); }
-      if (zombie) {
-        headshot = hit.point.y - zombie.object.position.y > 1.92;
-        zombie.takeDamage(this.player.laserDamage, headshot); confirmed = true; this.audio.impact();
+    this.shotOrigin.copy(this.raycaster.ray.origin); this.shotDirection.copy(this.raycaster.ray.direction);
+    const end = this.shotOrigin.clone().addScaledVector(this.shotDirection, 52);
+    let confirmed = false; let headshot = false; let nearest = 52; let target: (typeof this.enemies.alive)[number] | undefined;
+    // Animated skinned-mesh triangle raycasts caused a visible first-shot stall. These
+    // compact head/body hit volumes are stable, fast, and feel more consistent in play.
+    for (const zombie of this.enemies.alive) {
+      let candidateHeadshot = false; let candidateDistance = Number.POSITIVE_INFINITY;
+      for (const volume of [{ y: 2.28, radius: 0.38, head: true }, { y: 1.28, radius: 0.72, head: false }]) {
+        this.hitCenter.copy(zombie.object.position); this.hitCenter.y += volume.y;
+        this.hitOffset.copy(this.hitCenter).sub(this.shotOrigin);
+        const alongRay = this.hitOffset.dot(this.shotDirection);
+        if (alongRay <= 0 || alongRay >= nearest) continue;
+        const distanceSq = this.hitOffset.lengthSq() - alongRay * alongRay;
+        if (distanceSq <= volume.radius * volume.radius && alongRay < candidateDistance) {
+          candidateDistance = alongRay; candidateHeadshot = volume.head;
+        }
       }
+      if (candidateDistance < nearest) { nearest = candidateDistance; target = zombie; headshot = candidateHeadshot; }
+    }
+    if (target) {
+      end.copy(this.shotOrigin).addScaledVector(this.shotDirection, nearest);
+      target.takeDamage(this.player.laserDamage, headshot); confirmed = true; this.audio.impact();
     }
     const start = this.player.getMuzzleWorld();
     const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
@@ -187,7 +201,6 @@ export class Game {
     this.updateInteraction();
     const playerExposure = this.exposure.exposureAt(this.player.object.position);
     this.ui.update(this.player, this.objectives, playerExposure);
-    this.ui.updateProgression(this.progression);
     if (this.lastFlashlightState !== this.player.flashlightOn) { this.audio.flashlight(); this.lastFlashlightState = this.player.flashlightOn; }
     if (this.player.health <= 0) { this.state = GameState.GAME_OVER; document.exitPointerLock?.(); this.ui.setState(this.state); }
     if (this.objectives.stage === 'GATE' && !this.world.interactables.find((i) => i.kind === 'gate')!.active && this.player.object.position.z < -40.2) {

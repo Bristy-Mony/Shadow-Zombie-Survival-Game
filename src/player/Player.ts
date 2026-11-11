@@ -212,9 +212,10 @@ export class Player {
         const speed = this.sprinting ? CONFIG.player.sprintSpeed : CONFIG.player.walkSpeed;
         this.previous.copy(this.object.position); this.object.position.addScaledVector(move, speed * dt);
         this.collision.resolve(this.object.position, this.previous, CONFIG.player.radius);
-        const targetYaw = Math.atan2(-move.x, -move.z);
-        this.object.rotation.y += Math.atan2(Math.sin(targetYaw - this.object.rotation.y), Math.cos(targetYaw - this.object.rotation.y)) * Math.min(1, dt * 12);
       }
+      // The survivor always faces the crosshair, including while idle or strafing.
+      const aimYaw = this.yaw - Math.PI;
+      this.object.rotation.y += Math.atan2(Math.sin(aimYaw - this.object.rotation.y), Math.cos(aimYaw - this.object.rotation.y)) * Math.min(1, dt * 18);
       this.stamina = THREE.MathUtils.clamp(this.stamina + (this.sprinting ? -CONFIG.player.staminaDrain : CONFIG.player.staminaRegen) * dt, 0, 100);
       if (this.flashlightOn) this.battery = Math.max(0, this.battery - CONFIG.flashlight.batteryDrain * dt);
       if (this.battery <= 0) this.flashlightOn = false;
