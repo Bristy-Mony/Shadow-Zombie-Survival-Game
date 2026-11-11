@@ -37,10 +37,10 @@ export class Player {
   private actions = new Map<string, THREE.AnimationAction>();
   private currentAction?: THREE.AnimationAction;
   private previous = new THREE.Vector3();
-  private gun = new THREE.Group();
+  private torch = new THREE.Group();
+  private weapon?: THREE.Object3D;
   private muzzle = new THREE.Object3D();
   private shootCooldown = 0;
-  private recoil = 0;
 
   constructor(scene: THREE.Scene, private readonly camera: THREE.PerspectiveCamera, private readonly collision: CollisionSystem, private readonly exposure: LightExposureSystem, private readonly progression: Progression) {
     const effects = progression.effects;
@@ -59,17 +59,9 @@ export class Player {
   private buildEquipment() {
     const dark = new THREE.MeshStandardMaterial({ color: 0x161c22, metalness: 0.76, roughness: 0.28 });
     const cyan = new THREE.MeshStandardMaterial({ color: 0x2c9dac, emissive: 0x19d9ff, emissiveIntensity: 2.4, metalness: 0.5, roughness: 0.2 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.22, 0.72), dark); body.position.z = -0.3; body.castShadow = true; this.gun.add(body);
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.62, 10), dark); barrel.rotation.x = Math.PI / 2; barrel.position.z = -0.88; barrel.castShadow = true; this.gun.add(barrel);
-    const coil = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.09, 0.4), cyan); coil.position.set(0, 0.12, -0.38); this.gun.add(coil);
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.38, 0.18), dark); grip.position.set(0, -0.22, -0.18); grip.rotation.x = -0.22; this.gun.add(grip);
-    this.muzzle.position.set(0, 0, -1.23); this.gun.add(this.muzzle);
-    this.gun.position.set(0.43, 1.7, -0.42); this.gun.rotation.x = -0.08; this.object.add(this.gun);
-
-    const torch = new THREE.Group();
-    const torchBody = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 0.48, 10), dark); torchBody.rotation.x = Math.PI / 2; torch.add(torchBody);
-    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.1, 12), cyan); lens.rotation.x = Math.PI / 2; lens.position.z = -0.28; torch.add(lens);
-    torch.position.set(-0.42, 1.65, -0.46); this.object.add(torch);
+    const torchBody = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.095, 0.36, 12), dark); torchBody.rotation.x = Math.PI / 2; torchBody.castShadow = true; this.torch.add(torchBody);
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.115, 0.07, 12), cyan); lens.rotation.x = Math.PI / 2; lens.position.z = -0.205; this.torch.add(lens);
+    this.torch.visible = false;
   }
 
   private limb(color: number, length: number, radius: number) {
@@ -97,10 +89,38 @@ export class Player {
       this.object.add(character.root);
       this.mixer = character.mixer;
       this.actions = character.actions;
-      this.currentAction = crossFadeAction(this.actions, undefined, 'Idle', 0);
+      this.currentAction = crossFadeAction(this.actions, undefined, this.actions.has('Idle_Gun') ? 'Idle_Gun' : 'Idle', 0);
+      this.bindEquipmentToRig(character.root);
       this.fallbackModel.visible = false;
     } catch (error) {
       console.warn('Animated character could not load; using procedural fallback.', error);
+    }
+  }
+
+  private bindEquipmentToRig(characterRoot: THREE.Group) {
+    const rifle = characterRoot.getObjectByName('Rifle');
+    if (rifle) {
+      rifle.visible = true; this.weapon = rifle;
+      this.object.updateMatrixWorld(true);
+      const rifleMesh = rifle as THREE.Mesh;
+      if (rifleMesh.isMesh) {
+        rifleMesh.geometry.computeBoundingBox();
+        const bounds = rifleMesh.geometry.boundingBox;
+        if (bounds) {
+          const size = bounds.getSize(new THREE.Vector3()); const center = bounds.getCenter(new THREE.Vector3());
+          const axis: 'x' | 'y' | 'z' = size.x > size.y && size.x > size.z ? 'x' : size.y > size.z ? 'y' : 'z';
+          const start = center.clone(); const end = center.clone(); start[axis] = bounds.min[axis]; end[axis] = bounds.max[axis];
+          const torso = this.object.localToWorld(new THREE.Vector3(0, 1.55, 0));
+          const startDistance = rifle.localToWorld(start.clone()).distanceTo(torso); const endDistance = rifle.localToWorld(end.clone()).distanceTo(torso);
+          const barrelEnd = startDistance > endDistance ? start : end; const direction = startDistance > endDistance ? -1 : 1;
+          barrelEnd[axis] += direction * 0.08; this.muzzle.position.copy(barrelEnd);
+        }
+      }
+      rifle.add(this.muzzle);
+    }
+    const offHand = characterRoot.getObjectByName('Middle1.R');
+    if (offHand) {
+      offHand.add(this.torch); this.torch.position.set(-0.035, 0.045, -0.045); this.torch.rotation.set(1.62, 0.08, 0.12); this.torch.visible = true;
     }
   }
 
@@ -154,8 +174,11 @@ export class Player {
   heal(amount: number) { this.health = Math.min(this.maxHealth, this.health + amount); }
   addEnergy(amount: number) { this.energy = Math.min(this.maxEnergy, this.energy + amount); }
   canShoot() { return this.shootCooldown <= 0 && this.energy > 0 && this.health > 0; }
-  fire() { if (!this.canShoot()) return false; this.energy--; this.shootCooldown = this.fireCooldown; this.recoil = 1; return true; }
-  getMuzzleWorld(target = new THREE.Vector3()) { return this.muzzle.getWorldPosition(target); }
+  fire() { if (!this.canShoot()) return false; this.energy--; this.shootCooldown = this.fireCooldown; return true; }
+  getMuzzleWorld(target = new THREE.Vector3()) {
+    if (this.weapon) return this.muzzle.getWorldPosition(target);
+    return this.object.localToWorld(target.set(0.42, 1.65, -0.75));
+  }
   applyUpgrades() {
     const effects = this.progression.effects; const previousMaxHealth = this.maxHealth; const previousMaxEnergy = this.maxEnergy;
     this.maxHealth = effects.maxHealth; this.maxEnergy = effects.maxEnergy; this.laserDamage = effects.damage; this.fireCooldown = effects.fireCooldown;
@@ -174,8 +197,7 @@ export class Player {
 
   update(dt: number, input: InputManager, active: boolean) {
     if (this.invulnerability > 0) this.invulnerability -= dt;
-    this.shootCooldown = Math.max(0, this.shootCooldown - dt); this.recoil = Math.max(0, this.recoil - dt * 8);
-    this.gun.position.z = -0.42 + this.recoil * 0.16;
+    this.shootCooldown = Math.max(0, this.shootCooldown - dt);
     const mouse = input.consumeMouse();
     if (active) {
       this.yaw -= mouse.x * 0.0022; this.pitch = THREE.MathUtils.clamp(this.pitch - mouse.y * 0.0017, -0.65, 0.45);

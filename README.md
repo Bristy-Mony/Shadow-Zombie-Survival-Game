@@ -39,7 +39,7 @@ Click the game canvas to recapture the mouse after it has been released.
 - Lightweight sphere-vs-AABB collision detection
 - Fuse, battery, and medical pickups plus an optional floodlight breaker
 - Generator power-up sequence, evacuation gate, victory, death, pause, and in-place restart
-- CC0 laser, impact, zombie approach/attack/death, and looping horror ambience audio
+- User-provided looping gameplay music plus CC0 laser, impact, and zombie approach/attack/death effects
 - Responsive renderer with capped pixel ratio
 - Rigged Quaternius humanoid characters with blended idle, walk, jog, sprint, hit, and attack animations
 - ACES tone mapping and selective bloom for cinematic light response
@@ -48,7 +48,7 @@ Click the game canvas to recapture the mouse after it has been released.
 
 The clothed survivor, four distinct zombie types, character animations, vehicles, and urban props are from Quaternius' **Zombie Apocalypse Kit**. The pack is released under CC0 1.0 and may be used commercially. A local license copy is included in `public/assets/zombie-pack/`.
 
-Laser and impact sounds are from Kenney's CC0 **Sci-Fi Sounds** pack. Zombie vocals are from artisticdude's CC0 **Zombies Sound Pack**, and the background ambience is congusbongus' CC0 **Lost in a bad place** loop. Full provenance is included in `public/assets/audio/SOURCES.md`.
+The gameplay soundtrack is the user-provided track bundled for this project. Laser and impact sounds are from Kenney's CC0 **Sci-Fi Sounds** pack, while zombie vocals are from artisticdude's CC0 **Zombies Sound Pack**. Full provenance is included in `public/assets/audio/SOURCES.md`.
 
 ## Installation
 
@@ -72,4 +72,4 @@ npm run build
 - Vite
 - HTML5 / CSS3
 
-The game combines Three.js procedural effects with bundled CC0 character, environment, and audio assets; no proprietary assets are required.
+The game combines Three.js procedural effects with bundled open assets and the project owner's supplied soundtrack.

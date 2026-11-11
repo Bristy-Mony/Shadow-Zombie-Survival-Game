@@ -12,7 +12,7 @@ export class AudioManager {
     this.context ??= new AudioContext();
     if (this.context.state === 'suspended') void this.context.resume();
     if (!this.ambience) {
-      this.ambience = new Audio(`${import.meta.env.BASE_URL}assets/audio/dark-ambient.ogg`); this.ambience.loop = true; this.ambience.volume = 0.22;
+      this.ambience = new Audio(`${import.meta.env.BASE_URL}assets/audio/background.mp3`); this.ambience.loop = true; this.ambience.preload = 'auto'; this.ambience.volume = 0.32;
     }
     void this.ambience.play().catch(() => undefined);
   }
@@ -32,7 +32,7 @@ export class AudioManager {
   impact() { this.sample(this.files.impact, 0.25, 0.9 + Math.random() * 0.18); }
   zombieNear() { this.sample(this.files.zombieNear, 0.32, 0.82 + Math.random() * 0.28); }
   zombieAttack() { this.sample(this.files.zombieAttack, 0.42, 0.9 + Math.random() * 0.16); }
-  zombieDie() { this.sample(this.files.zombieDie, 0.5, 0.88 + Math.random() * 0.14); }
+  zombieDie() { this.sample(this.files.zombieDie, 0.62, 0.9 + Math.random() * 0.08); }
   flashlight() { this.tone(190, 0.07, 'square', 0.025); }
   warning() { this.tone(64, 0.7, 'sawtooth', 0.04); }
   power() { this.tone(90, 0.7, 'sawtooth', 0.08); window.setTimeout(() => this.tone(220, 1, 'sine', 0.045), 400); }

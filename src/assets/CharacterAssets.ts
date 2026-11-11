@@ -47,7 +47,7 @@ export class CharacterAssets {
 
     clone.traverse((object) => {
       const mesh = object as THREE.SkinnedMesh;
-      if (options.role === 'player' && ['Axe', 'Guitar', 'Knife', 'Pistol', 'Rifle', 'Shotgun', 'SMG', 'Spear', 'WoodenBat_Barbed', 'WoodenBat_Saw'].includes(object.name)) object.visible = false;
+      if (options.role === 'player' && ['Axe', 'Guitar', 'Knife', 'Pistol', 'Rifle', 'Shotgun', 'SMG', 'Spear', 'WoodenBat_Barbed', 'WoodenBat_Saw'].includes(object.name)) object.visible = object.name === 'Rifle';
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
