@@ -1,5 +1,6 @@
 import './styles.css';
 import './combat.css';
+import './performance.css';
 import { Game } from './core/Game';
 
 let game: Game;

@@ -15,6 +15,11 @@ export class UI {
   private energyFill!: HTMLElement;
   private energyText!: HTMLElement;
   private coinText!: HTMLElement;
+  private healthText!: HTMLElement;
+  private staminaText!: HTMLElement;
+  private batteryPanel!: HTMLElement;
+  private dangerText!: HTMLElement;
+  private crosshair!: HTMLElement;
   private danger!: HTMLElement;
   private prompt!: HTMLElement;
   private toast!: HTMLElement;
@@ -22,6 +27,7 @@ export class UI {
   private lowHealth!: HTMLElement;
   private hud!: HTMLElement;
   private overlays!: HTMLElement;
+  private toastFrame = 0;
   onStart?: () => void;
   onResume?: () => void;
   onRestart?: () => void;
@@ -73,6 +79,8 @@ export class UI {
     this.healthFill = this.root.querySelector('.health i')!; this.staminaFill = this.root.querySelector('.stamina i')!; this.batteryFill = this.root.querySelector('.battery-panel i')!;
     this.batteryText = this.root.querySelector('#battery-text')!; this.danger = this.root.querySelector('#danger')!; this.prompt = this.root.querySelector('#prompt')!;
     this.energyFill = this.root.querySelector('.weapon-panel i')!; this.energyText = this.root.querySelector('#energy-text')!; this.coinText = this.root.querySelector('#coin-text')!;
+    this.healthText = this.root.querySelector('.health b')!; this.staminaText = this.root.querySelector('.stamina b')!; this.batteryPanel = this.root.querySelector('.battery-panel')!;
+    this.dangerText = this.danger.querySelector('strong')!; this.crosshair = this.root.querySelector('.crosshair')!;
     this.toast = this.root.querySelector('#toast')!; this.damage = this.root.querySelector('#damage-flash')!; this.lowHealth = this.root.querySelector('#low-health')!;
     this.hud = this.root.querySelector('#hud')!; this.overlays = this.root.querySelector('#overlays')!;
     this.bind();
@@ -111,13 +119,13 @@ export class UI {
     this.objective.textContent = objective.title; this.progress.textContent = objective.progress;
     this.healthFill.style.width = `${player.health / player.maxHealth * 100}%`; this.staminaFill.style.width = `${player.stamina}%`; this.batteryFill.style.width = `${player.battery}%`;
     this.energyFill.style.width = `${player.energy / player.maxEnergy * 100}%`; this.energyText.textContent = `${player.energy} / ${player.maxEnergy}`;
-    (this.root.querySelector('.health b') as HTMLElement).textContent = `${Math.ceil(player.health)}`;
-    (this.root.querySelector('.stamina b') as HTMLElement).textContent = `${Math.ceil(player.stamina)}`;
+    this.healthText.textContent = `${Math.ceil(player.health)}`;
+    this.staminaText.textContent = `${Math.ceil(player.stamina)}`;
     this.batteryText.textContent = `${Math.ceil(player.battery)}%`;
-    this.root.querySelector('.battery-panel')?.classList.toggle('warning', player.battery < 18);
+    this.batteryPanel.classList.toggle('warning', player.battery < 18);
     this.lowHealth.classList.toggle('visible', player.health < 26);
     const label = exposure > 0.62 ? 'LIGHT' : exposure > 0.32 ? 'DIM' : exposure > 0.14 ? 'DARK' : 'DANGER';
-    this.danger.className = `danger ${label.toLowerCase()}`; this.danger.querySelector('strong')!.textContent = label;
+    this.danger.className = `danger ${label.toLowerCase()}`; this.dangerText.textContent = label;
   }
 
   updateProgression(progression: Progression) {
@@ -133,13 +141,16 @@ export class UI {
 
   showPrompt(text?: string) { this.prompt.textContent = text ?? ''; this.prompt.classList.toggle('visible', !!text); }
   notify(title: string, detail: string) {
-    this.toast.innerHTML = `<strong>${title}</strong><span>${detail}</span>`; this.toast.classList.remove('show'); void this.toast.offsetWidth; this.toast.classList.add('show');
+    this.toast.innerHTML = `<strong>${title}</strong><span>${detail}</span>`; this.toast.classList.remove('show'); cancelAnimationFrame(this.toastFrame);
+    this.toastFrame = requestAnimationFrame(() => this.toast.classList.add('show'));
   }
-  damageFlash() { this.damage.classList.remove('hit'); void this.damage.offsetWidth; this.damage.classList.add('hit'); }
+  damageFlash() {
+    this.damage.getAnimations().forEach((animation) => animation.cancel());
+    this.damage.animate([{ background: 'rgba(180,0,0,.62)' }, { background: 'transparent' }], { duration: 550, easing: 'ease-out' });
+  }
   shotFeedback(hit: boolean, headshot = false) {
-    const crosshair = this.root.querySelector('.crosshair')!;
-    crosshair.className = `crosshair firing${hit ? ' confirmed' : ''}${headshot ? ' headshot' : ''}`;
-    window.setTimeout(() => { crosshair.className = 'crosshair'; }, 120);
+    this.crosshair.className = `crosshair firing${hit ? ' confirmed' : ''}${headshot ? ' headshot' : ''}`;
+    window.setTimeout(() => { this.crosshair.className = 'crosshair'; }, 120);
   }
   showTutorial() { const el = this.root.querySelector('#tutorial')!; el.classList.add('show'); window.setTimeout(() => el.classList.remove('show'), 6200); }
   setVictoryStats(time: number, player: Player, stunned: number) {

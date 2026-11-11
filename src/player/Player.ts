@@ -129,7 +129,7 @@ export class Player {
 
   private buildFlashlight(scene: THREE.Scene) {
     this.flashlight = new THREE.SpotLight(0xeaf8ff, 38, CONFIG.flashlight.range, CONFIG.flashlight.angle, 0.34, 1.15);
-    this.flashlight.castShadow = true; this.flashlight.shadow.mapSize.set(512, 512); this.flashlight.shadow.bias = -0.0002;
+    this.flashlight.castShadow = false;
     this.flashlight.target = this.flashlightTarget; scene.add(this.flashlight, this.flashlightTarget);
     const makeBeamMaterial = (color: number, opacity: number) => {
       const material = new THREE.ShaderMaterial({

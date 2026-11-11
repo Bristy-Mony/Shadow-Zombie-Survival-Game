@@ -9,18 +9,13 @@ import { EnemyManager } from '../enemies/EnemyManager';
 import { ObjectiveManager } from '../gameplay/ObjectiveManager';
 import { AudioManager } from '../audio/AudioManager';
 import { UI } from '../ui/UI';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { Progression, UpgradeId } from '../gameplay/Progression';
 import { LootSystem } from '../gameplay/LootSystem';
 
 export class Game {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 140);
-  private readonly renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-  private readonly composer: EffectComposer;
+  private readonly renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   private readonly clock = new THREE.Clock();
   private readonly exposure = new LightExposureSystem();
   private readonly progression = new Progression();
@@ -42,7 +37,7 @@ export class Game {
   private readonly shotDirection = new THREE.Vector3();
   private readonly hitCenter = new THREE.Vector3();
   private readonly hitOffset = new THREE.Vector3();
-  private shotEffects: { line: THREE.Line; light: THREE.PointLight; life: number }[] = [];
+  private shotEffects: { line: THREE.Line; life: number }[] = [];
   private zombieVoiceTimer = 4;
   private vehicleMode: 'FOOT' | 'ENTERING' | 'DRIVING' | 'EXITING' = 'FOOT';
   onRestartRequested?: (startImmediately: boolean) => void;
@@ -50,18 +45,12 @@ export class Game {
   constructor() {
     this.scene.background = new THREE.Color(COLORS.night);
     this.scene.fog = new THREE.FogExp2(COLORS.fog, CONFIG.world.fogDensity);
-    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
+    this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1));
     this.renderer.setSize(innerWidth, innerHeight);
-    this.renderer.shadowMap.enabled = true; this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = false;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping; this.renderer.toneMappingExposure = 1.28;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.ui.canvasHost.appendChild(this.renderer.domElement);
-    this.composer = new EffectComposer(this.renderer);
-    this.composer.setPixelRatio(Math.min(devicePixelRatio, 1.25));
-    this.composer.setSize(innerWidth, innerHeight);
-    this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.42, 0.24, 0.82));
-    this.composer.addPass(new OutputPass());
     this.input = new InputManager(this.renderer.domElement);
     this.input.onUnlock = () => { if (this.state === GameState.PLAYING) this.pause(); };
     this.setupBaseLights();
@@ -78,8 +67,7 @@ export class Game {
 
   private setupBaseLights() {
     const hemi = new THREE.HemisphereLight(0x7296b8, 0x171510, 1.28); this.scene.add(hemi);
-    const moon = new THREE.DirectionalLight(COLORS.moon, 2.7); moon.position.set(-22, 38, 18); moon.castShadow = true;
-    moon.shadow.mapSize.set(1024, 1024); moon.shadow.camera.left = -43; moon.shadow.camera.right = 43; moon.shadow.camera.top = 43; moon.shadow.camera.bottom = -43;
+    const moon = new THREE.DirectionalLight(COLORS.moon, 2.7); moon.position.set(-22, 38, 18);
     this.scene.add(moon);
   }
 
@@ -165,7 +153,7 @@ export class Game {
     const start = this.player.getMuzzleWorld();
     const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
     const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: headshot ? 0xffd34f : 0x38eaff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }));
-    const light = new THREE.PointLight(0x42e8ff, 5, 5); light.position.copy(start); this.scene.add(line, light); this.shotEffects.push({ line, light, life: 0.085 });
+    this.scene.add(line); this.shotEffects.push({ line, life: 0.085 });
     this.ui.shotFeedback(confirmed, headshot);
   }
 
@@ -173,7 +161,7 @@ export class Game {
     for (let index = this.shotEffects.length - 1; index >= 0; index--) {
       const effect = this.shotEffects[index]; effect.life -= dt;
       (effect.line.material as THREE.LineBasicMaterial).opacity = Math.max(0, effect.life / 0.085);
-      if (effect.life <= 0) { this.scene.remove(effect.line, effect.light); effect.line.geometry.dispose(); (effect.line.material as THREE.Material).dispose(); this.shotEffects.splice(index, 1); }
+      if (effect.life <= 0) { this.scene.remove(effect.line); effect.line.geometry.dispose(); (effect.line.material as THREE.Material).dispose(); this.shotEffects.splice(index, 1); }
     }
   }
 
@@ -242,8 +230,8 @@ export class Game {
   }
 
   private loop = () => {
-    const dt = Math.min(this.clock.getDelta(), 0.05); this.update(dt); this.composer.render(); this.raf = requestAnimationFrame(this.loop);
+    const dt = Math.min(this.clock.getDelta(), 0.05); this.update(dt); this.renderer.render(this.scene, this.camera); this.raf = requestAnimationFrame(this.loop);
   };
-  private resize = () => { this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix(); this.renderer.setSize(innerWidth, innerHeight); this.composer.setSize(innerWidth, innerHeight); };
+  private resize = () => { this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix(); this.renderer.setSize(innerWidth, innerHeight); };
   destroy() { cancelAnimationFrame(this.raf); this.input.destroy(); this.audio.destroy(); window.removeEventListener('resize', this.resize); this.renderer.dispose(); }
 }

@@ -290,8 +290,8 @@ export class World {
     [-9.2, 9.2].forEach((x) => this.mesh(new THREE.BoxGeometry(0.55, 0.5, 108), this.material(0x343a40), [x, 0.25, -92], false));
     for (let z = -55; z > -136; z -= 16) {
       [-7.6, 7.6].forEach((x) => {
-        const lamp = new THREE.PointLight(0x8ecfff, 2.2, 12, 2); lamp.position.set(x, 3.2, z); this.group.add(lamp);
         this.mesh(new THREE.CylinderGeometry(0.07, 0.1, 3.4, 7), this.material(0x303b44, 0.5, 0.7), [x, 1.7, z]);
+        this.mesh(new THREE.SphereGeometry(0.16, 7, 5), new THREE.MeshBasicMaterial({ color: 0x8ecfff }), [x, 3.25, z], false);
       });
     }
 

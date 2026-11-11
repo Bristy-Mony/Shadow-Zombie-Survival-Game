@@ -21,7 +21,7 @@ export const CONFIG = {
     attackRange: 1.4,
     normalDamage: 12,
     shadowDamage: 21,
-    population: 9,
+    population: 7,
   },
   world: {
     size: 84,

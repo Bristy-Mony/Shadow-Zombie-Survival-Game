@@ -49,8 +49,8 @@ export class CharacterAssets {
       const mesh = object as THREE.SkinnedMesh;
       if (options.role === 'player' && ['Axe', 'Guitar', 'Knife', 'Pistol', 'Rifle', 'Shotgun', 'SMG', 'Spear', 'WoodenBat_Barbed', 'WoodenBat_Saw'].includes(object.name)) object.visible = object.name === 'Rifle';
       if (!mesh.isMesh) return;
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
+      mesh.castShadow = false;
+      mesh.receiveShadow = false;
       if (options.shadow) {
         const source = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         const materials = source.map((material) => {
