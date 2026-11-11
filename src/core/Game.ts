@@ -44,6 +44,7 @@ export class Game {
   private readonly hitOffset = new THREE.Vector3();
   private shotEffects: { line: THREE.Line; light: THREE.PointLight; life: number }[] = [];
   private zombieVoiceTimer = 4;
+  private vehicleMode: 'FOOT' | 'ENTERING' | 'DRIVING' | 'EXITING' = 'FOOT';
   onRestartRequested?: (startImmediately: boolean) => void;
 
   constructor() {
@@ -96,6 +97,7 @@ export class Game {
     this.enemies.onPlayerHit = () => { this.ui.damageFlash(); this.audio.zombieAttack(); };
     this.enemies.onZombieKilled = (zombie, headshot) => {
       this.loot.spawn(zombie.object.position.clone()); this.audio.zombieDie();
+      this.objectives.recordKill();
       if (headshot) this.ui.notify('HEADSHOT', 'Infected neutralized');
     };
     this.loot.onPickup = (kind, value) => {
@@ -107,7 +109,7 @@ export class Game {
 
   private start() {
     this.state = GameState.PLAYING; this.ui.setState(this.state); this.audio.resume(); this.renderer.domElement.requestPointerLock?.();
-    this.ui.showTutorial(); this.ui.notify('OBJECTIVE UPDATED', 'Find 3 Power Fuses');
+    this.ui.showTutorial(); this.ui.notify('LEVEL 1 · BLACK START', 'Find 3 power fuses and restore the district generator');
   }
   begin() { this.start(); }
   private resume() { this.state = GameState.PLAYING; this.ui.setState(this.state); this.clock.getDelta(); this.renderer.domElement.requestPointerLock?.(); }
@@ -118,13 +120,19 @@ export class Game {
     if (item.kind === 'fuse') { item.active = false; item.object.visible = false; this.objectives.collectFuse(); this.audio.pickup(); }
     else if (item.kind === 'battery') { item.active = false; item.object.visible = false; this.player.addEnergy(15); this.player.battery = Math.min(100, this.player.battery + 12); this.audio.pickup(); this.ui.notify('ENERGY CELL RECOVERED', '+15 laser cells · +12 flashlight charge'); }
     else if (item.kind === 'medkit') { item.active = false; item.object.visible = false; this.player.heal(35); this.audio.pickup(); this.ui.notify('MEDICAL SUPPLIES', '+35 health'); }
-    else if (item.kind === 'breaker') { item.onInteract?.(); item.active = false; this.audio.power(); this.ui.notify('FLOOD LIGHT ONLINE', 'A temporary safe route is active'); }
+    else if (item.kind === 'breaker') {
+      if (this.objectives.stage !== 'RELAY') { this.ui.notify('RELAY LOCKED', 'Complete the containment objective first'); return; }
+      item.onInteract?.(); item.active = false; this.objectives.activateRelay(); this.audio.power(); this.ui.notify('FLOOD LIGHT ONLINE', 'The final extraction route is visible');
+    }
     else if (item.kind === 'generator') {
       if (this.objectives.stage !== 'GENERATOR') { this.ui.notify('GENERATOR OFFLINE', this.objectives.fuses < 3 ? `Requires ${3 - this.objectives.fuses} more power fuse${3 - this.objectives.fuses === 1 ? '' : 's'}` : 'No response'); return; }
       item.active = false; this.world.activatePower(); this.objectives.restorePower(); this.audio.power(); this.audio.startHum();
     } else if (item.kind === 'gate') {
-      if (this.objectives.stage !== 'GATE') { this.ui.notify('GATE OFFLINE', 'Restore district power first'); return; }
-      this.world.openGate(); item.active = false; this.audio.power(); this.ui.notify('GATE OPENING', 'Enter the illuminated evacuation zone');
+      if (this.objectives.stage !== 'GATE_ONE') { this.ui.notify('GATE OFFLINE', 'Restore district power first'); return; }
+      this.world.openGate(); item.active = false; this.objectives.beginPurge(this.enemies.alive.length); this.audio.power(); this.ui.notify('LEVEL 2 UNLOCKED', 'Clear the infected before reaching extraction');
+    } else if (item.kind === 'car') {
+      if (this.objectives.stage !== 'CAR') return;
+      this.vehicleMode = 'ENTERING'; item.active = false; this.player.beginVehicleEntry(); this.audio.power();
     }
   }
 
@@ -185,11 +193,34 @@ export class Game {
   private update(dt: number) {
     const active = this.state === GameState.PLAYING;
     if (this.input.consume('Escape')) { if (active) this.pause(); else if (this.state === GameState.PAUSED) this.resume(); }
-    this.player.update(dt, this.input, active);
+    const onFoot = active && this.vehicleMode === 'FOOT';
+    if (this.vehicleMode === 'FOOT') this.player.update(dt, this.input, onFoot);
     this.world.update(active ? dt : 0);
-    this.enemies.update(dt, this.player, active);
-    this.loot.update(dt, this.player, active); this.updateShotEffects(dt);
+    this.enemies.update(dt, this.player, onFoot);
+    this.loot.update(dt, this.player, onFoot); this.updateShotEffects(dt);
     if (!active) return;
+    if (this.vehicleMode === 'ENTERING') {
+      if (this.player.updateVehicleEntry(dt, this.world.escapeCar)) {
+        this.vehicleMode = 'DRIVING'; this.world.beginDriving(); this.objectives.enterVehicle();
+      }
+      this.audio.updateThreat(Number.POSITIVE_INFINITY, dt, true); this.ui.update(this.player, this.objectives, 1); return;
+    }
+    if (this.vehicleMode === 'DRIVING') {
+      const steering = Number(this.input.down('KeyD')) - Number(this.input.down('KeyA'));
+      const distance = this.world.driveEscapeVehicle(dt, this.input.down('KeyW'), steering);
+      this.objectives.setDriveDistance(distance); this.player.followVehicle(dt, this.world.escapeCar); this.audio.updateThreat(Number.POSITIVE_INFINITY, dt, true);
+      this.ui.update(this.player, this.objectives, 1);
+      if (distance >= this.objectives.driveTarget) {
+        this.vehicleMode = 'EXITING'; this.player.beginVehicleExit(this.world.escapeCar); this.ui.notify('SAFE ZONE REACHED', 'Leaving the extraction vehicle');
+      }
+      return;
+    }
+    if (this.vehicleMode === 'EXITING') {
+      if (this.player.updateVehicleExit(dt, this.world.escapeCar)) {
+        this.objectives.escape(); this.state = GameState.VICTORY; document.exitPointerLock?.(); this.ui.setVictoryStats(this.playTime, this.player, this.enemies.stunnedTotal); this.ui.setState(this.state);
+      }
+      this.audio.updateThreat(Number.POSITIVE_INFINITY, dt, true); this.ui.update(this.player, this.objectives, 1); return;
+    }
     if (this.input.down('Mouse0') || this.input.consume('Mouse0')) this.fireLaser();
     this.zombieVoiceTimer -= dt;
     if (this.zombieVoiceTimer <= 0) {
@@ -200,11 +231,13 @@ export class Game {
     if (this.exposure.inSafeZone(this.player.object.position)) this.player.health = Math.min(100, this.player.health + dt * 1.8);
     this.updateInteraction();
     const playerExposure = this.exposure.exposureAt(this.player.object.position);
+    const nearestZombie = this.enemies.alive.reduce((nearest, zombie) => Math.min(nearest, zombie.object.position.distanceTo(this.player.object.position)), Number.POSITIVE_INFINITY);
+    this.audio.updateThreat(nearestZombie, dt);
     this.ui.update(this.player, this.objectives, playerExposure);
     if (this.lastFlashlightState !== this.player.flashlightOn) { this.audio.flashlight(); this.lastFlashlightState = this.player.flashlightOn; }
     if (this.player.health <= 0) { this.state = GameState.GAME_OVER; document.exitPointerLock?.(); this.ui.setState(this.state); }
-    if (this.objectives.stage === 'GATE' && !this.world.interactables.find((i) => i.kind === 'gate')!.active && this.player.object.position.z < -40.2) {
-      this.objectives.escape(); this.state = GameState.VICTORY; document.exitPointerLock?.(); this.ui.setVictoryStats(this.playTime, this.player, this.enemies.stunnedTotal); this.ui.setState(this.state);
+    if (this.objectives.stage === 'FINAL_GATE' && this.player.object.position.z < -40.2) {
+      this.objectives.reachVehicle(); this.world.showEscapeVehicle(); this.ui.notify('EXTRACTION VEHICLE LOCATED', 'Approach the driver door and press E');
     }
   }
 

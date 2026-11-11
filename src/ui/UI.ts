@@ -56,7 +56,7 @@ export class UI {
         </main>
         <section id="how" class="screen panel-screen">
           <div class="modal"><p class="kicker">FIELD BRIEFING</p><h2>THE DARKNESS HUNTS</h2>
-            <p>Your flashlight slows the infected but cannot kill them. Aim the laser weapon and fire; headshots deal extra damage. Search for energy cells and collect enemy loot.</p>
+            <p>Your flashlight freezes only the infected caught inside its beam; move the light away and they immediately resume the hunt. Aim the laser weapon and fire; headshots deal extra damage. Complete four staged objectives, enter the extraction vehicle, and drive to safety.</p>
             <div class="controls"><span><kbd>WASD</kbd> Move</span><span><kbd>MOUSE</kbd> Look / Fire</span><span><kbd>SHIFT</kbd> Sprint</span><span><kbd>F</kbd> Flashlight</span><span><kbd>E</kbd> Interact</span><span><kbd>ESC</kbd> Pause</span></div>
             <button data-action="back">BACK</button>
           </div>
@@ -65,7 +65,7 @@ export class UI {
         <section id="pause" class="screen panel-screen"><div class="modal compact"><p class="kicker">SYSTEM HALTED</p><h2>PAUSED</h2><button data-action="resume">RESUME</button><button class="ghost" data-action="restart">RESTART</button><button class="ghost" data-action="menu">MAIN MENU</button></div></section>
         <section id="death" class="screen panel-screen red"><div class="modal"><p class="kicker">SIGNAL LOST</p><h2>YOU WERE CONSUMED<br>BY THE DARKNESS</h2><p>The district remembers every light that went out.</p><button data-action="restart">RESTART</button><button class="ghost" data-action="menu">MAIN MENU</button></div></section>
         <section id="victory" class="screen panel-screen victory"><div class="modal"><p class="kicker">EVACUATION COMPLETE</p><h2>YOU ESCAPED<br>THE SHADOW ZONE</h2><div id="stats" class="stats"></div><button data-action="restart">PLAY AGAIN</button><button class="ghost" data-action="menu">MAIN MENU</button></div></section>
-        <div id="tutorial"><span><kbd>WASD</kbd> MOVE</span><span><kbd>MOUSE</kbd> AIM</span><span><kbd>LMB</kbd> FIRE</span><span><kbd>F</kbd> FLASHLIGHT</span><span><kbd>E</kbd> INTERACT</span><b>FLASHLIGHT SLOWS · LASER KILLS</b></div>
+        <div id="tutorial"><span><kbd>WASD</kbd> MOVE</span><span><kbd>MOUSE</kbd> AIM</span><span><kbd>LMB</kbd> FIRE</span><span><kbd>F</kbd> FLASHLIGHT</span><span><kbd>E</kbd> INTERACT</span><b>FLASHLIGHT FREEZES · LASER KILLS</b></div>
       </div>
       <div class="mobile-warning">Shadow Zombie is designed for keyboard and mouse.<br>For the best experience, use a desktop browser.</div>`;
     this.canvasHost = this.root.querySelector('#canvas-host')!;

@@ -6,7 +6,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 export interface Interactable {
   id: string;
-  kind: 'fuse' | 'battery' | 'medkit' | 'generator' | 'breaker' | 'gate';
+  kind: 'fuse' | 'battery' | 'medkit' | 'generator' | 'breaker' | 'gate' | 'car';
   object: THREE.Object3D;
   prompt: string;
   active: boolean;
@@ -24,6 +24,7 @@ export class World {
   readonly shadowTriggers = [new THREE.Vector3(-25, 0, 8), new THREE.Vector3(21, 0, -19)];
   readonly generatorPosition = new THREE.Vector3(24, 0, -27);
   readonly gatePosition = new THREE.Vector3(0, 0, -38);
+  readonly escapeCar = new THREE.Group();
   private dust!: THREE.Points;
   private sparks!: THREE.Points;
   private sparkLife = 0;
@@ -33,6 +34,9 @@ export class World {
   powerOn = false;
   private readonly propLoader = new GLTFLoader();
   private readonly propCache = new Map<string, Promise<THREE.Group>>();
+  private readonly carWheels: THREE.Object3D[] = [];
+  private carSpeed = 0;
+  private carTravel = 0;
 
   constructor(private readonly scene: THREE.Scene, private readonly exposure: LightExposureSystem) {
     this.group.name = 'Abandoned district';
@@ -44,6 +48,7 @@ export class World {
     this.buildPickups();
     this.buildGenerator();
     this.buildGate();
+    this.buildEscapeRoute();
     this.buildParticles();
   }
 
@@ -273,6 +278,68 @@ export class World {
     panel.userData.gate = gate;
     const safeLight = new THREE.PointLight(0x9be8ff, 0, 16, 1.5); safeLight.position.set(0, 4, -42); this.group.add(safeLight);
     panel.userData.light = safeLight;
+  }
+
+  private buildEscapeRoute() {
+    const road = this.mesh(new THREE.PlaneGeometry(18, 108), this.material(0x111820, 0.94), [0, 0.018, -92], false);
+    road.rotation.x = -Math.PI / 2;
+    const lineMaterial = new THREE.MeshBasicMaterial({ color: 0xd5b856, transparent: true, opacity: 0.52 });
+    for (let z = -48; z > -140; z -= 9) {
+      const line = this.mesh(new THREE.PlaneGeometry(0.16, 4), lineMaterial, [0, 0.035, z], false); line.rotation.x = -Math.PI / 2;
+    }
+    [-9.2, 9.2].forEach((x) => this.mesh(new THREE.BoxGeometry(0.55, 0.5, 108), this.material(0x343a40), [x, 0.25, -92], false));
+    for (let z = -55; z > -136; z -= 16) {
+      [-7.6, 7.6].forEach((x) => {
+        const lamp = new THREE.PointLight(0x8ecfff, 2.2, 12, 2); lamp.position.set(x, 3.2, z); this.group.add(lamp);
+        this.mesh(new THREE.CylinderGeometry(0.07, 0.1, 3.4, 7), this.material(0x303b44, 0.5, 0.7), [x, 1.7, z]);
+      });
+    }
+
+    const car = this.escapeCar; car.name = 'Armored escape vehicle'; car.position.set(0, 0, -48); car.visible = false;
+    const fallback = new THREE.Group(); fallback.name = 'Vehicle loading fallback'; car.add(fallback);
+    const bodyMaterial = this.material(0x26343b, 0.38, 0.72); const glassMaterial = this.material(0x07151c, 0.12, 0.35);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.45, 0.72, 4.8), bodyMaterial); body.position.y = 0.83; body.castShadow = true; fallback.add(body);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.45, 1.35), bodyMaterial); hood.position.set(0, 1.2, -1.55); hood.castShadow = true; fallback.add(hood);
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.02, 1.05, 2.15), glassMaterial); cabin.position.set(0, 1.55, 0.15); cabin.castShadow = true; fallback.add(cabin);
+    const bumper = new THREE.Mesh(new THREE.BoxGeometry(2.62, 0.28, 0.25), this.material(0x111518, 0.3, 0.9)); bumper.position.set(0, 0.62, -2.45); fallback.add(bumper);
+    const wheelGeometry = new THREE.CylinderGeometry(0.46, 0.46, 0.32, 16); wheelGeometry.rotateZ(Math.PI / 2);
+    for (const x of [-1.24, 1.24]) for (const z of [-1.55, 1.55]) {
+      const wheel = new THREE.Mesh(wheelGeometry, this.material(0x090b0d, 0.82, 0.18)); wheel.position.set(x, 0.48, z); wheel.castShadow = true; fallback.add(wheel); this.carWheels.push(wheel);
+    }
+    for (const x of [-0.72, 0.72]) {
+      const headlight = new THREE.SpotLight(0xdff5ff, 5.5, 24, Math.PI / 7, 0.45, 1.4); headlight.position.set(x, 1, -2.35);
+      headlight.target.position.set(x, 0.2, -15); car.add(headlight, headlight.target);
+    }
+    void this.loadProp('Vehicle_Sports_Armored.gltf').then((source) => {
+      const model = source.clone(true); model.traverse((object) => { const mesh = object as THREE.Mesh; if (mesh.isMesh) { mesh.castShadow = true; mesh.receiveShadow = true; } });
+      const bounds = new THREE.Box3().setFromObject(model); const size = bounds.getSize(new THREE.Vector3()); const scale = 5.25 / Math.max(size.x, size.z, 0.01);
+      model.scale.setScalar(scale); model.position.y = -bounds.min.y * scale; model.rotation.y = Math.PI; car.add(model); fallback.visible = false;
+      this.carWheels.length = 0; ['BackWheels', 'FrontWheel_R', 'FrontWheel_L'].forEach((name) => { const wheel = model.getObjectByName(name); if (wheel) this.carWheels.push(wheel); });
+    }).catch((error) => console.warn('Escape vehicle model failed to load; using fallback.', error));
+    this.group.add(car);
+    this.interactables.push({ id: 'escape-car', kind: 'car', object: car, prompt: '[E] Enter Escape Vehicle', active: false });
+  }
+
+  showEscapeVehicle() {
+    this.escapeCar.visible = true;
+    const car = this.interactables.find((item) => item.kind === 'car'); if (car) car.active = true;
+  }
+
+  beginDriving() {
+    const car = this.interactables.find((item) => item.kind === 'car'); if (car) car.active = false;
+    this.carSpeed = 0; this.carTravel = 0;
+  }
+
+  driveEscapeVehicle(dt: number, throttle: boolean, steering: number) {
+    const targetSpeed = throttle ? 11.5 : 4.2;
+    this.carSpeed = THREE.MathUtils.lerp(this.carSpeed, targetSpeed, 1 - Math.exp(-dt * 2.4));
+    const targetYaw = THREE.MathUtils.clamp(-steering * 0.24, -0.24, 0.24);
+    this.escapeCar.rotation.y = THREE.MathUtils.lerp(this.escapeCar.rotation.y, targetYaw, 1 - Math.exp(-dt * 3.4));
+    const forward = new THREE.Vector3(-Math.sin(this.escapeCar.rotation.y), 0, -Math.cos(this.escapeCar.rotation.y));
+    this.escapeCar.position.addScaledVector(forward, this.carSpeed * dt); this.escapeCar.position.x = THREE.MathUtils.clamp(this.escapeCar.position.x, -5.7, 5.7);
+    this.carTravel += this.carSpeed * dt;
+    this.carWheels.forEach((wheel) => { wheel.rotation.x -= this.carSpeed * dt / 0.46; });
+    return this.carTravel;
   }
 
   private buildParticles() {

@@ -3,8 +3,10 @@ export class AudioManager {
   private hum?: OscillatorNode;
   private humGain?: GainNode;
   private ambience?: HTMLAudioElement;
+  private threatLoop?: HTMLAudioElement;
   private readonly pools = new Map<string, HTMLAudioElement[]>();
   private tensionNodes: AudioNode[] = [];
+  private tensionMaster?: GainNode;
   private readonly files = {
     shot: `${import.meta.env.BASE_URL}assets/audio/laser-shot.ogg`, impact: `${import.meta.env.BASE_URL}assets/audio/laser-impact.ogg`,
     zombieNear: `${import.meta.env.BASE_URL}assets/audio/zombie-near.wav`, zombieAttack: `${import.meta.env.BASE_URL}assets/audio/zombie-attack.wav`, zombieDie: `${import.meta.env.BASE_URL}assets/audio/zombie-die.wav`,
@@ -14,10 +16,12 @@ export class AudioManager {
     this.context ??= new AudioContext();
     if (this.context.state === 'suspended') void this.context.resume();
     if (!this.ambience) {
-      this.ambience = new Audio(`${import.meta.env.BASE_URL}assets/audio/background.mp3`); this.ambience.loop = true; this.ambience.preload = 'auto'; this.ambience.volume = 0.2;
+      this.ambience = new Audio(`${import.meta.env.BASE_URL}assets/audio/horror-music-593677.mp3`); this.ambience.loop = true; this.ambience.preload = 'auto'; this.ambience.volume = 0.32;
+      this.threatLoop = new Audio(this.files.zombieNear); this.threatLoop.loop = true; this.threatLoop.preload = 'auto'; this.threatLoop.volume = 0;
       this.preloadSamples();
     }
     void this.ambience.play().catch(() => undefined);
+    void this.threatLoop?.play().catch(() => undefined);
     this.startTensionScore();
   }
 
@@ -39,7 +43,7 @@ export class AudioManager {
 
   private startTensionScore() {
     if (this.tensionNodes.length || !this.context) return;
-    const ctx = this.context; const master = ctx.createGain(); master.gain.value = 0.035; master.connect(ctx.destination);
+    const ctx = this.context; const master = ctx.createGain(); master.gain.value = 0.025; master.connect(ctx.destination); this.tensionMaster = master;
     const filter = ctx.createBiquadFilter(); filter.type = 'lowpass'; filter.frequency.value = 420; filter.Q.value = 1.8; filter.connect(master);
     const droneA = ctx.createOscillator(); const droneB = ctx.createOscillator(); const droneGain = ctx.createGain();
     droneA.type = 'sine'; droneA.frequency.value = 43.65; droneB.type = 'triangle'; droneB.frequency.value = 46.25; droneB.detune.value = -7;
@@ -48,6 +52,15 @@ export class AudioManager {
     const lfo = ctx.createOscillator(); const lfoGain = ctx.createGain(); lfo.type = 'sine'; lfo.frequency.value = 0.19; lfoGain.gain.value = 0.1; lfo.connect(lfoGain).connect(pulseGain.gain);
     droneA.start(); droneB.start(); pulse.start(); lfo.start();
     this.tensionNodes = [master, filter, droneA, droneB, droneGain, pulse, pulseGain, lfo, lfoGain];
+  }
+
+  updateThreat(nearestZombieDistance: number, dt: number, driving = false) {
+    if (!this.ambience || !this.threatLoop) return;
+    const proximity = driving || !Number.isFinite(nearestZombieDistance) ? 0 : Math.max(0, Math.min(1, 1 - (nearestZombieDistance - 2) / 20)) ** 1.35;
+    const smoothing = 1 - Math.exp(-dt * 2.7);
+    this.threatLoop.volume += ((0.015 + proximity * 0.46) - this.threatLoop.volume) * smoothing;
+    this.ambience.volume += (((driving ? 0.38 : 0.33 - proximity * 0.1)) - this.ambience.volume) * smoothing;
+    if (this.tensionMaster && this.context) this.tensionMaster.gain.setTargetAtTime(driving ? 0.018 : 0.024 + proximity * 0.05, this.context.currentTime, 0.25);
   }
 
   tone(frequency: number, duration = 0.12, type: OscillatorType = 'sine', volume = 0.06) {
@@ -71,7 +84,8 @@ export class AudioManager {
   }
   destroy() {
     this.ambience?.pause(); this.ambience = undefined;
+    this.threatLoop?.pause(); this.threatLoop = undefined;
     for (const pool of this.pools.values()) for (const audio of pool) { audio.pause(); audio.src = ''; }
-    this.pools.clear(); this.hum?.stop(); this.hum = undefined; this.tensionNodes = []; void this.context?.close();
+    this.pools.clear(); this.hum?.stop(); this.hum = undefined; this.tensionNodes = []; this.tensionMaster = undefined; void this.context?.close();
   }
 }

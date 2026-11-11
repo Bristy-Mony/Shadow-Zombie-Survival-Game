@@ -38,6 +38,8 @@ export class Zombie {
   private attackWindup = 0;
   private animatedRoot?: THREE.Group;
   private deathTimer = 0;
+  private flashlightFrozen = false;
+  private readonly flashlightTarget = new THREE.Vector3();
 
   constructor(public readonly shadow: boolean, position: THREE.Vector3, private readonly exposureSystem: LightExposureSystem, private readonly collision: CollisionSystem, private readonly variant = 0) {
     this.maxHealth = shadow ? 125 : variant === 1 ? 105 : 82; this.health = this.maxHealth;
@@ -133,15 +135,17 @@ export class Zombie {
     const safeBlocked = this.exposureSystem.inSafeZone(player.object.position) && distance > 2.8;
     const detection = this.shadow ? THREE.MathUtils.lerp(22, 8, this.lightLevel) : THREE.MathUtils.lerp(17, 9, this.lightLevel);
 
-    if (this.state === 'STUNNED') {
-      this.stunTimer -= dt;
-      if (this.stunTimer <= 0) { this.state = 'CHASE'; this.stunResistance = this.shadow ? 2.8 : 4.2; }
-    } else if (this.lightLevel > (this.shadow ? 0.42 : 0.74)) {
-      this.stunCharge += dt * (this.shadow ? 1.6 : 1);
-      if (this.stunCharge >= CONFIG.flashlight.stunTime && this.stunResistance <= 0) {
-        this.state = 'STUNNED'; this.stunTimer = this.shadow ? 2 : 1.35; this.stunCharge = 0; this.stunnedCount++;
-      } else this.state = 'LIGHT_RECOIL';
-    } else {
+    this.flashlightTarget.copy(this.object.position); this.flashlightTarget.y += this.shadow ? 1.35 : 1.5;
+    const flashlightFocus = this.exposureSystem.flashlightFocusAt(this.flashlightTarget);
+    if (flashlightFocus > 0.035) {
+      if (!this.flashlightFrozen) this.stunnedCount++;
+      this.flashlightFrozen = true; this.state = 'STUNNED'; this.attackWindup = 0; this.stunCharge = 0;
+      this.animate(dt, 0); return;
+    }
+    if (this.flashlightFrozen) { this.flashlightFrozen = false; this.state = 'CHASE'; this.stunTimer = 0; }
+
+    if (this.state === 'LIGHT_RECOIL' && this.stunTimer > 0) this.stunTimer -= dt;
+    else {
       this.stunCharge = Math.max(0, this.stunCharge - dt * 0.75);
       if (distance < CONFIG.enemy.attackRange && !safeBlocked) this.state = 'ATTACK';
       else if (distance < detection && !safeBlocked) this.state = 'CHASE';
@@ -169,7 +173,7 @@ export class Zombie {
         player.damage(this.shadow ? CONFIG.enemy.shadowDamage : CONFIG.enemy.normalDamage, this.object.position);
       }
     }
-    if (direction.lengthSq() > 0 && this.state !== 'STUNNED') {
+    if (direction.lengthSq() > 0) {
       this.lastPosition.copy(this.object.position); this.object.position.addScaledVector(direction, speed * dt);
       this.collision.resolve(this.object.position, this.lastPosition, 0.45);
       const angle = Math.atan2(-direction.x, -direction.z);

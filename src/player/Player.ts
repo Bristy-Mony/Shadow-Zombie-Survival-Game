@@ -41,6 +41,9 @@ export class Player {
   private weapon?: THREE.Object3D;
   private muzzle = new THREE.Object3D();
   private shootCooldown = 0;
+  private vehicleEntryStart = new THREE.Vector3();
+  private vehicleEntryTime = 0;
+  private vehicleExitTime = 0;
 
   constructor(scene: THREE.Scene, private readonly camera: THREE.PerspectiveCamera, private readonly collision: CollisionSystem, private readonly exposure: LightExposureSystem, private readonly progression: Progression) {
     const effects = progression.effects;
@@ -185,6 +188,48 @@ export class Player {
     if (this.maxHealth > previousMaxHealth) this.health += this.maxHealth - previousMaxHealth;
     if (this.maxEnergy > previousMaxEnergy) this.energy += this.maxEnergy - previousMaxEnergy;
     this.health = Math.min(this.health, this.maxHealth); this.energy = Math.min(this.energy, this.maxEnergy);
+  }
+
+  beginVehicleEntry() {
+    this.vehicleEntryStart.copy(this.object.position); this.vehicleEntryTime = 0; this.flashlightOn = false;
+    if (this.weapon) this.weapon.visible = false; this.torch.visible = false;
+    const duck = this.actions.get('Duck');
+    if (duck) {
+      this.currentAction?.fadeOut(0.18); duck.reset().setLoop(THREE.LoopOnce, 1); duck.clampWhenFinished = true; duck.fadeIn(0.18).play(); this.currentAction = duck;
+    }
+  }
+
+  updateVehicleEntry(dt: number, car: THREE.Object3D) {
+    this.vehicleEntryTime += dt; const t = THREE.MathUtils.clamp(this.vehicleEntryTime / 1.65, 0, 1); const eased = t * t * (3 - 2 * t);
+    const door = new THREE.Vector3(-1.15 * (1 - eased), 0.18, 0.25).applyAxisAngle(new THREE.Vector3(0, 1, 0), car.rotation.y).add(car.position);
+    this.object.position.lerpVectors(this.vehicleEntryStart, door, eased);
+    this.object.rotation.y += Math.atan2(Math.sin(car.rotation.y - this.object.rotation.y), Math.cos(car.rotation.y - this.object.rotation.y)) * Math.min(1, dt * 8);
+    this.mixer?.update(dt); this.updateCamera(dt);
+    if (t >= 1) { this.object.visible = false; return true; }
+    return false;
+  }
+
+  followVehicle(dt: number, car: THREE.Object3D) {
+    this.object.visible = false; this.object.position.copy(car.position); this.yaw = Math.PI + car.rotation.y; this.pitch = -0.08;
+    this.updateCamera(dt);
+  }
+
+  beginVehicleExit(car: THREE.Object3D) {
+    this.vehicleExitTime = 0; this.object.visible = true;
+    this.object.position.copy(new THREE.Vector3(-1.1, 0.18, 0.25).applyAxisAngle(new THREE.Vector3(0, 1, 0), car.rotation.y).add(car.position));
+    const duck = this.actions.get('Duck');
+    if (duck) {
+      duck.enabled = true; duck.paused = false; duck.time = duck.getClip().duration; duck.setEffectiveTimeScale(-1).setLoop(THREE.LoopOnce, 1); duck.clampWhenFinished = true; duck.play(); this.currentAction = duck;
+    }
+  }
+
+  updateVehicleExit(dt: number, car: THREE.Object3D) {
+    this.vehicleExitTime += dt; const t = THREE.MathUtils.clamp(this.vehicleExitTime / 1.45, 0, 1); const eased = t * t * (3 - 2 * t);
+    const start = new THREE.Vector3(-1.1, 0.18, 0.25); const end = new THREE.Vector3(-2.2, 0, 0.2);
+    const local = start.lerp(end, eased).applyAxisAngle(new THREE.Vector3(0, 1, 0), car.rotation.y).add(car.position);
+    this.object.position.copy(local); this.object.rotation.y = car.rotation.y; this.mixer?.update(dt); this.updateCamera(dt);
+    if (t >= 1) { if (this.weapon) this.weapon.visible = true; this.torch.visible = true; return true; }
+    return false;
   }
 
   damage(amount: number, from: THREE.Vector3) {
