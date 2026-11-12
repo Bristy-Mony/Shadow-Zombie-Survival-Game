@@ -5,6 +5,8 @@ export class AudioManager {
   private ambience?: HTMLAudioElement;
   private threatLoop?: HTMLAudioElement;
   private readonly pools = new Map<string, HTMLAudioElement[]>();
+  private readonly sampleData = new Map<string, ArrayBuffer>();
+  private readonly sampleBuffers = new Map<string, AudioBuffer>();
   private tensionNodes: AudioNode[] = [];
   private tensionMaster?: GainNode;
   private readonly files = {
@@ -12,16 +14,34 @@ export class AudioManager {
     zombieNear: `${import.meta.env.BASE_URL}assets/audio/zombie-near.wav`, zombieAttack: `${import.meta.env.BASE_URL}assets/audio/zombie-attack.wav`, zombieDie: `${import.meta.env.BASE_URL}assets/audio/zombie-die.wav`,
   };
 
+  constructor() { void this.prefetchSamples(); }
+
+  private async prefetchSamples() {
+    await Promise.all(Object.values(this.files).map(async (source) => {
+      try { this.sampleData.set(source, await (await fetch(source)).arrayBuffer()); } catch { /* Media-element fallback remains available. */ }
+    }));
+    void this.decodeSamples();
+  }
+
+  private async decodeSamples() {
+    if (!this.context) return;
+    await Promise.all([...this.sampleData].map(async ([source, data]) => {
+      if (this.sampleBuffers.has(source)) return;
+      try { this.sampleBuffers.set(source, await this.context!.decodeAudioData(data.slice(0))); } catch { /* Keep fallback. */ }
+    }));
+  }
+
   resume() {
     this.context ??= new AudioContext();
     if (this.context.state === 'suspended') void this.context.resume();
+    void this.decodeSamples();
     if (!this.ambience) {
       this.ambience = new Audio(`${import.meta.env.BASE_URL}assets/audio/horror-music-593677.mp3`); this.ambience.loop = true; this.ambience.preload = 'auto'; this.ambience.volume = 0.32;
       this.threatLoop = new Audio(this.files.zombieNear); this.threatLoop.loop = true; this.threatLoop.preload = 'auto'; this.threatLoop.volume = 0;
       this.preloadSamples();
     }
-    void this.ambience.play().catch(() => undefined);
-    void this.threatLoop?.play().catch(() => undefined);
+    if (this.ambience.paused) void this.ambience.play().catch(() => undefined);
+    if (this.threatLoop?.paused) void this.threatLoop.play().catch(() => undefined);
     this.startTensionScore();
   }
 
@@ -36,6 +56,13 @@ export class AudioManager {
   }
 
   private sample(source: string, volume = 0.5, rate = 1) {
+    const buffer = this.sampleBuffers.get(source);
+    if (buffer && this.context) {
+      const node = this.context.createBufferSource(); const gain = this.context.createGain();
+      node.buffer = buffer; node.playbackRate.value = rate; gain.gain.value = volume;
+      node.connect(gain).connect(this.context.destination); node.start();
+      return;
+    }
     const pool = this.pools.get(source);
     const audio = pool?.find((candidate) => candidate.paused || candidate.ended) ?? pool?.[0] ?? new Audio(source);
     audio.pause(); audio.currentTime = 0; audio.volume = volume; audio.playbackRate = rate; void audio.play().catch(() => undefined);
@@ -87,5 +114,6 @@ export class AudioManager {
     this.threatLoop?.pause(); this.threatLoop = undefined;
     for (const pool of this.pools.values()) for (const audio of pool) { audio.pause(); audio.src = ''; }
     this.pools.clear(); this.hum?.stop(); this.hum = undefined; this.tensionNodes = []; this.tensionMaster = undefined; void this.context?.close();
+    this.sampleBuffers.clear(); this.sampleData.clear();
   }
 }

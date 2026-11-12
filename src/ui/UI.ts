@@ -24,11 +24,14 @@ export class UI {
   private danger!: HTMLElement;
   private prompt!: HTMLElement;
   private toast!: HTMLElement;
+  private toastTitle!: HTMLElement;
+  private toastDetail!: HTMLElement;
   private damage!: HTMLElement;
   private lowHealth!: HTMLElement;
   private hud!: HTMLElement;
   private overlays!: HTMLElement;
   private toastFrame = 0;
+  private shotFeedbackTimer = 0;
   private chapterFrame = 0;
   onStart?: () => void;
   onResume?: () => void;
@@ -52,7 +55,7 @@ export class UI {
         <div class="coin-panel"><span>COINS</span><strong id="coin-text">0</strong></div>
         <div id="danger" class="danger dim"><span>AMBIENT LIGHT</span><strong>DIM</strong></div>
         <div class="crosshair"><i></i><i></i></div>
-        <div id="prompt"></div><div id="toast"></div><div id="low-health">CRITICAL CONDITION</div>
+        <div id="prompt"></div><div id="toast"><strong></strong><span></span></div><div id="low-health">CRITICAL CONDITION</div>
       </div>
       <div id="overlays">
         <main id="menu" class="screen active">
@@ -85,7 +88,8 @@ export class UI {
     this.healthText = this.root.querySelector('.health b')!; this.staminaText = this.root.querySelector('.stamina b')!; this.batteryPanel = this.root.querySelector('.battery-panel')!;
     this.dangerText = this.danger.querySelector('strong')!; this.crosshair = this.root.querySelector('.crosshair')!;
     this.chapter = this.root.querySelector('#chapter-banner')!;
-    this.toast = this.root.querySelector('#toast')!; this.damage = this.root.querySelector('#damage-flash')!; this.lowHealth = this.root.querySelector('#low-health')!;
+    this.toast = this.root.querySelector('#toast')!; this.toastTitle = this.toast.querySelector('strong')!; this.toastDetail = this.toast.querySelector('span')!;
+    this.damage = this.root.querySelector('#damage-flash')!; this.lowHealth = this.root.querySelector('#low-health')!;
     this.hud = this.root.querySelector('#hud')!; this.overlays = this.root.querySelector('#overlays')!;
     this.bind();
   }
@@ -133,8 +137,7 @@ export class UI {
   }
 
   updateProgression(progression: Progression) {
-    this.coinText.textContent = `${progression.coins}`;
-    this.root.querySelectorAll<HTMLElement>('[data-shop-coins]').forEach((element) => { element.textContent = `${progression.coins}`; });
+    this.updateCoinBalance(progression);
     SHOP_ITEMS.forEach((item) => {
       const article = this.root.querySelector<HTMLElement>(`[data-shop-item="${item.id}"]`); const button = article?.querySelector<HTMLButtonElement>('button');
       if (!article || !button) return;
@@ -143,9 +146,14 @@ export class UI {
     });
   }
 
+  updateCoinBalance(progression: Progression) {
+    this.coinText.textContent = `${progression.coins}`;
+    this.root.querySelectorAll<HTMLElement>('[data-shop-coins]').forEach((element) => { element.textContent = `${progression.coins}`; });
+  }
+
   showPrompt(text?: string) { this.prompt.textContent = text ?? ''; this.prompt.classList.toggle('visible', !!text); }
   notify(title: string, detail: string) {
-    this.toast.innerHTML = `<strong>${title}</strong><span>${detail}</span>`; this.toast.classList.remove('show'); cancelAnimationFrame(this.toastFrame);
+    this.toastTitle.textContent = title; this.toastDetail.textContent = detail; this.toast.classList.remove('show'); cancelAnimationFrame(this.toastFrame);
     this.toastFrame = requestAnimationFrame(() => this.toast.classList.add('show'));
   }
   damageFlash() {
@@ -154,7 +162,8 @@ export class UI {
   }
   shotFeedback(hit: boolean, headshot = false) {
     this.crosshair.className = `crosshair firing${hit ? ' confirmed' : ''}${headshot ? ' headshot' : ''}`;
-    window.setTimeout(() => { this.crosshair.className = 'crosshair'; }, 120);
+    window.clearTimeout(this.shotFeedbackTimer);
+    this.shotFeedbackTimer = window.setTimeout(() => { this.crosshair.className = 'crosshair'; }, 120);
   }
   showTutorial() { const el = this.root.querySelector('#tutorial')!; el.classList.add('show'); window.setTimeout(() => el.classList.remove('show'), 6200); }
   showChapter(level: number, title: string, detail: string) {

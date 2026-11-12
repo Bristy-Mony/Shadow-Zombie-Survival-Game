@@ -12,6 +12,13 @@ import { UI } from '../ui/UI';
 import { Progression, UpgradeId } from '../gameplay/Progression';
 import { LootSystem } from '../gameplay/LootSystem';
 
+interface ShotEffect {
+  line: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  positions: THREE.BufferAttribute;
+  life: number;
+  active: boolean;
+}
+
 export class Game {
   private readonly scene = new THREE.Scene();
   private readonly camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 140);
@@ -37,7 +44,13 @@ export class Game {
   private readonly shotDirection = new THREE.Vector3();
   private readonly hitCenter = new THREE.Vector3();
   private readonly hitOffset = new THREE.Vector3();
-  private shotEffects: { line: THREE.Line; life: number }[] = [];
+  private readonly shotStart = new THREE.Vector3();
+  private readonly shotEnd = new THREE.Vector3();
+  private readonly aimCenter = new THREE.Vector2();
+  private readonly interactPosition = new THREE.Vector3();
+  private readonly shotEffects: ShotEffect[] = [];
+  private shotCursor = 0;
+  private hudElapsed = 1;
   private zombieVoiceTimer = 4;
   private vehicleMode: 'FOOT' | 'ENTERING' | 'DRIVING' | 'EXITING' = 'FOOT';
   onRestartRequested?: (startImmediately: boolean) => void;
@@ -54,6 +67,7 @@ export class Game {
     this.input = new InputManager(this.renderer.domElement);
     this.input.onUnlock = () => { if (this.state === GameState.PLAYING) this.pause(); };
     this.setupBaseLights();
+    this.buildShotPool();
     this.world = new World(this.scene, this.exposure);
     this.player = new Player(this.scene, this.camera, this.world.collisions, this.exposure, this.progression);
     this.enemies = new EnemyManager(this.scene, this.world.spawnPoints, this.world.shadowTriggers, this.exposure, this.world.collisions);
@@ -71,6 +85,17 @@ export class Game {
     this.scene.add(moon);
   }
 
+  private buildShotPool() {
+    for (let index = 0; index < 8; index++) {
+      const geometry = new THREE.BufferGeometry();
+      const positions = new THREE.BufferAttribute(new Float32Array(6), 3);
+      positions.setUsage(THREE.DynamicDrawUsage); geometry.setAttribute('position', positions);
+      const material = new THREE.LineBasicMaterial({ color: 0x38eaff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+      const line = new THREE.Line(geometry, material); line.visible = false; line.frustumCulled = false; this.scene.add(line);
+      this.shotEffects.push({ line, positions, life: 0, active: false });
+    }
+  }
+
   private bindEvents() {
     this.ui.onStart = () => this.start();
     this.ui.onResume = () => this.resume();
@@ -84,7 +109,7 @@ export class Game {
     this.enemies.onShadowWarning = () => { this.audio.warning(); this.ui.notify('SOMETHING STIRS', 'Keep your light trained on the darkness'); };
     this.enemies.onPlayerHit = () => { this.ui.damageFlash(); this.audio.zombieAttack(); };
     this.enemies.onZombieKilled = (zombie, headshot) => {
-      this.loot.spawn(zombie.object.position.clone()); this.audio.zombieDie();
+      this.loot.spawn(zombie.object.position); this.audio.zombieDie();
       if (zombie.object.userData.campaignWave && this.objectives.recordKill()) {
         this.world.showExtractionRelay();
         this.ui.showChapter(3, 'BLACKOUT RELAY', 'Activate the relay and open the final gate');
@@ -93,7 +118,7 @@ export class Game {
       if (headshot) this.ui.notify('HEADSHOT', 'Infected neutralized');
     };
     this.loot.onPickup = (kind, value) => {
-      this.audio.pickup(); this.ui.updateProgression(this.progression);
+      this.audio.pickup(); this.ui.updateCoinBalance(this.progression);
       const label = kind === 'coin' ? `${value} coin${value === 1 ? '' : 's'}` : kind === 'battery' ? `${value} laser cells` : `${value} health`;
       this.ui.notify('LOOT RECOVERED', `+${label}`);
     };
@@ -132,9 +157,9 @@ export class Game {
 
   private fireLaser() {
     if (!this.player.fire()) return;
-    this.audio.fire(); this.raycaster.setFromCamera(new THREE.Vector2(0, 0), this.camera); this.raycaster.far = 52;
+    this.audio.fire(); this.raycaster.setFromCamera(this.aimCenter, this.camera); this.raycaster.far = 52;
     this.shotOrigin.copy(this.raycaster.ray.origin); this.shotDirection.copy(this.raycaster.ray.direction);
-    const end = this.shotOrigin.clone().addScaledVector(this.shotDirection, 52);
+    this.shotEnd.copy(this.shotOrigin).addScaledVector(this.shotDirection, 52);
     let confirmed = false; let headshot = false; let nearest = 52; let target: (typeof this.enemies.alive)[number] | undefined;
     // Animated skinned-mesh triangle raycasts caused a visible first-shot stall. These
     // compact head/body hit volumes are stable, fast, and feel more consistent in play.
@@ -153,28 +178,30 @@ export class Game {
       if (candidateDistance < nearest) { nearest = candidateDistance; target = zombie; headshot = candidateHeadshot; }
     }
     if (target) {
-      end.copy(this.shotOrigin).addScaledVector(this.shotDirection, nearest);
+      this.shotEnd.copy(this.shotOrigin).addScaledVector(this.shotDirection, nearest);
       target.takeDamage(this.player.laserDamage, headshot); confirmed = true; this.audio.impact();
     }
-    const start = this.player.getMuzzleWorld();
-    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-    const line = new THREE.Line(geometry, new THREE.LineBasicMaterial({ color: headshot ? 0xffd34f : 0x38eaff, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending }));
-    this.scene.add(line); this.shotEffects.push({ line, life: 0.085 });
+    this.player.getMuzzleWorld(this.shotStart);
+    const effect = this.shotEffects[this.shotCursor]; this.shotCursor = (this.shotCursor + 1) % this.shotEffects.length;
+    effect.positions.setXYZ(0, this.shotStart.x, this.shotStart.y, this.shotStart.z);
+    effect.positions.setXYZ(1, this.shotEnd.x, this.shotEnd.y, this.shotEnd.z); effect.positions.needsUpdate = true;
+    effect.line.material.color.setHex(headshot ? 0xffd34f : 0x38eaff); effect.line.material.opacity = 0.95;
+    effect.life = 0.085; effect.active = true; effect.line.visible = true;
     this.ui.shotFeedback(confirmed, headshot);
   }
 
   private updateShotEffects(dt: number) {
-    for (let index = this.shotEffects.length - 1; index >= 0; index--) {
-      const effect = this.shotEffects[index]; effect.life -= dt;
-      (effect.line.material as THREE.LineBasicMaterial).opacity = Math.max(0, effect.life / 0.085);
-      if (effect.life <= 0) { this.scene.remove(effect.line); effect.line.geometry.dispose(); (effect.line.material as THREE.Material).dispose(); this.shotEffects.splice(index, 1); }
+    for (const effect of this.shotEffects) {
+      if (!effect.active) continue;
+      effect.life -= dt; effect.line.material.opacity = Math.max(0, effect.life / 0.085);
+      if (effect.life <= 0) { effect.active = false; effect.line.visible = false; }
     }
   }
 
   private updateInteraction() {
     this.nearby = undefined; let nearest = 3.05;
     for (const item of this.world.interactables) {
-      if (!item.active) continue; const distance = this.player.object.position.distanceTo(item.object.getWorldPosition(new THREE.Vector3()));
+      if (!item.active) continue; const distance = this.player.object.position.distanceTo(item.object.getWorldPosition(this.interactPosition));
       if (distance < nearest) { nearest = distance; this.nearby = item; }
     }
     if (this.nearby) {
@@ -197,13 +224,13 @@ export class Game {
       if (this.player.updateVehicleEntry(dt, this.world.escapeCar)) {
         this.vehicleMode = 'DRIVING'; this.world.beginDriving(); this.objectives.enterVehicle();
       }
-      this.audio.updateThreat(Number.POSITIVE_INFINITY, dt, true); this.ui.update(this.player, this.objectives, 1); return;
+      this.audio.updateThreat(Number.POSITIVE_INFINITY, dt, true); this.updateHud(dt, 1); return;
     }
     if (this.vehicleMode === 'DRIVING') {
       const steering = Number(this.input.down('KeyD')) - Number(this.input.down('KeyA'));
       const distance = this.world.driveEscapeVehicle(dt, this.input.down('KeyW'), steering);
       this.objectives.setDriveDistance(distance); this.player.followVehicle(dt, this.world.escapeCar); this.audio.updateThreat(Number.POSITIVE_INFINITY, dt, true);
-      this.ui.update(this.player, this.objectives, 1);
+      this.updateHud(dt, 1);
       if (distance >= this.objectives.driveTarget) {
         this.vehicleMode = 'EXITING'; this.player.beginVehicleExit(this.world.escapeCar); this.ui.notify('SAFE ZONE REACHED', 'Leaving the extraction vehicle');
       }
@@ -213,7 +240,7 @@ export class Game {
       if (this.player.updateVehicleExit(dt, this.world.escapeCar)) {
         this.objectives.escape(); this.state = GameState.VICTORY; document.exitPointerLock?.(); this.ui.setVictoryStats(this.playTime, this.player, this.enemies.stunnedTotal); this.ui.setState(this.state);
       }
-      this.audio.updateThreat(Number.POSITIVE_INFINITY, dt, true); this.ui.update(this.player, this.objectives, 1); return;
+      this.audio.updateThreat(Number.POSITIVE_INFINITY, dt, true); this.updateHud(dt, 1); return;
     }
     if (this.input.down('Mouse0') || this.input.consume('Mouse0')) this.fireLaser();
     this.zombieVoiceTimer -= dt;
@@ -227,7 +254,7 @@ export class Game {
     const playerExposure = this.exposure.exposureAt(this.player.object.position);
     const nearestZombie = this.enemies.alive.reduce((nearest, zombie) => Math.min(nearest, zombie.object.position.distanceTo(this.player.object.position)), Number.POSITIVE_INFINITY);
     this.audio.updateThreat(nearestZombie, dt);
-    this.ui.update(this.player, this.objectives, playerExposure);
+    this.updateHud(dt, playerExposure);
     if (this.lastFlashlightState !== this.player.flashlightOn) { this.audio.flashlight(); this.lastFlashlightState = this.player.flashlightOn; }
     if (this.player.health <= 0) { this.state = GameState.GAME_OVER; document.exitPointerLock?.(); this.ui.setState(this.state); }
     if (this.objectives.stage === 'GATE_ONE' && !this.world.interactables.find((item) => item.kind === 'gate')!.active && this.player.object.position.z < -43) {
@@ -242,9 +269,19 @@ export class Game {
     }
   }
 
+  private updateHud(dt: number, exposure: number) {
+    this.hudElapsed += dt;
+    if (this.hudElapsed < 1 / 30) return;
+    this.hudElapsed = 0; this.ui.update(this.player, this.objectives, exposure);
+  }
+
   private loop = () => {
     const dt = Math.min(this.clock.getDelta(), 0.05); this.update(dt); this.renderer.render(this.scene, this.camera); this.raf = requestAnimationFrame(this.loop);
   };
   private resize = () => { this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix(); this.renderer.setSize(innerWidth, innerHeight); };
-  destroy() { cancelAnimationFrame(this.raf); this.input.destroy(); this.audio.destroy(); window.removeEventListener('resize', this.resize); this.renderer.dispose(); }
+  destroy() {
+    cancelAnimationFrame(this.raf); this.input.destroy(); this.audio.destroy(); window.removeEventListener('resize', this.resize);
+    for (const effect of this.shotEffects) { effect.line.geometry.dispose(); effect.line.material.dispose(); }
+    this.renderer.dispose();
+  }
 }
