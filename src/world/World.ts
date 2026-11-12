@@ -6,7 +6,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 export interface Interactable {
   id: string;
-  kind: 'fuse' | 'battery' | 'medkit' | 'generator' | 'breaker' | 'gate' | 'car';
+  kind: 'fuse' | 'battery' | 'medkit' | 'generator' | 'breaker' | 'gate' | 'relay' | 'final-gate' | 'car';
   object: THREE.Object3D;
   prompt: string;
   active: boolean;
@@ -31,6 +31,7 @@ export class World {
   private elapsed = 0;
   private powerActivatedAt = 0;
   private gateCollider?: Collider;
+  private finalGateCollider?: Collider;
   powerOn = false;
   private readonly propLoader = new GLTFLoader();
   private readonly propCache = new Map<string, Promise<THREE.Group>>();
@@ -295,7 +296,20 @@ export class World {
       });
     }
 
-    const car = this.escapeCar; car.name = 'Armored escape vehicle'; car.position.set(0, 0, -48); car.visible = false;
+    const relay = this.addBox('extraction relay', -6.7, 1, -65, 0.75, 1.7, 1.15, 0x253039, false);
+    relay.visible = false;
+    this.interactables.push({ id: 'extraction-relay', kind: 'relay', object: relay, prompt: '[E] Activate Extraction Relay', active: false });
+
+    this.addBox('final gate pillar', -4.5, 0, -82, 1.2, 5, 1.4, 0x353f46);
+    this.addBox('final gate pillar', 4.5, 0, -82, 1.2, 5, 1.4, 0x353f46);
+    const finalGate = this.addBox('final evacuation gate', 0, 0, -82, 7.8, 3.7, 0.45, 0x263138, false);
+    this.finalGateCollider = this.collisions.add(new THREE.Vector3(0, 1.85, -82), new THREE.Vector3(7.8, 3.7, 0.7), 'final evacuation gate');
+    finalGate.userData.open = false;
+    const finalPanel = this.addBox('final gate panel', 5.2, 1.1, -81.6, 0.55, 1.3, 0.45, 0x4b2929, false);
+    finalPanel.userData.gate = finalGate;
+    this.interactables.push({ id: 'final-gate', kind: 'final-gate', object: finalPanel, prompt: 'Final Gate Locked', active: false });
+
+    const car = this.escapeCar; car.name = 'Armored escape vehicle'; car.position.set(0, 0, -91); car.visible = false;
     const fallback = new THREE.Group(); fallback.name = 'Vehicle loading fallback'; car.add(fallback);
     const bodyMaterial = this.material(0x26343b, 0.38, 0.72); const glassMaterial = this.material(0x07151c, 0.12, 0.35);
     const body = new THREE.Mesh(new THREE.BoxGeometry(2.45, 0.72, 4.8), bodyMaterial); body.position.y = 0.83; body.castShadow = true; fallback.add(body);
@@ -323,6 +337,22 @@ export class World {
   showEscapeVehicle() {
     this.escapeCar.visible = true;
     const car = this.interactables.find((item) => item.kind === 'car'); if (car) car.active = true;
+  }
+
+  showExtractionRelay() {
+    const relay = this.interactables.find((item) => item.kind === 'relay');
+    if (relay) { relay.object.visible = true; relay.active = true; }
+  }
+
+  activateExtractionRelay() {
+    const relay = this.interactables.find((item) => item.kind === 'relay');
+    if (relay) {
+      relay.active = false;
+      const mesh = relay.object as THREE.Mesh; (mesh.material as THREE.MeshStandardMaterial).emissive.setHex(0x38b9a8);
+    }
+    const finalGate = this.interactables.find((item) => item.kind === 'final-gate')?.object.userData.gate as THREE.Mesh | undefined;
+    if (finalGate) finalGate.userData.open = true;
+    if (this.finalGateCollider) { this.collisions.remove(this.finalGateCollider); this.finalGateCollider = undefined; }
   }
 
   beginDriving() {
@@ -373,7 +403,7 @@ export class World {
   update(dt: number) {
     this.elapsed += dt;
     this.interactables.forEach((item, index) => {
-      if (!item.active || item.kind === 'generator' || item.kind === 'gate' || item.kind === 'breaker') return;
+      if (!item.active || !['fuse', 'battery', 'medkit'].includes(item.kind)) return;
       item.object.rotation.y += dt * 1.2;
       item.object.position.y += Math.sin(this.elapsed * 2 + index) * dt * 0.035;
     });
@@ -385,6 +415,8 @@ export class World {
     });
     const gateObj = (this.interactables.find((i) => i.kind === 'gate')!.object.userData.gate as THREE.Mesh);
     if (gateObj.userData.open) gateObj.position.y = Math.min(5.3, gateObj.position.y + dt * 2.3);
+    const finalGateObj = (this.interactables.find((i) => i.kind === 'final-gate')!.object.userData.gate as THREE.Mesh);
+    if (finalGateObj.userData.open) finalGateObj.position.y = Math.min(5.3, finalGateObj.position.y + dt * 2.3);
     this.dust.rotation.y += dt * 0.006;
     if (this.sparkLife > 0) {
       this.sparkLife -= dt; const a = this.sparks.geometry.attributes.position as THREE.BufferAttribute;

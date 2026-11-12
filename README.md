@@ -40,6 +40,7 @@ Click the game canvas to recapture the mouse after it has been released.
 - Fuse, battery, and medical pickups plus an optional floodlight breaker
 - Generator power-up sequence, evacuation gate, victory, death, pause, and in-place restart
 - Pixabay horror soundtrack with adaptive proximity crossfades, an original procedural suspense layer, plus CC0 laser, impact, and zombie approach/attack/death effects
+- Four playable campaign levels: power restoration, a dedicated containment wave, extraction relay/final gate, and an animated vehicle escape
 - Responsive renderer with capped pixel ratio
 - Rigged Quaternius humanoid characters with blended idle, walk, jog, sprint, hit, and attack animations
 - ACES tone mapping and selective bloom for cinematic light response

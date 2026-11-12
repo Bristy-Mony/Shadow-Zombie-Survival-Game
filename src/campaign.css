@@ -1,0 +1,25 @@
+#chapter-banner {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(2, 10, 14, .82), transparent);
+}
+
+#chapter-banner span,
+#chapter-banner strong,
+#chapter-banner small { display: block; }
+#chapter-banner span { color: #62dce0; font-size: 13px; font-weight: 700; letter-spacing: .42em; }
+#chapter-banner strong { margin: 8px 0; color: #f2f7f6; font: 700 48px 'Barlow Condensed'; letter-spacing: .12em; }
+#chapter-banner small { color: #e3bd72; font-size: 13px; letter-spacing: .16em; }
+#chapter-banner.show { animation: chapter-reveal 4.2s ease both; }
+
+@keyframes chapter-reveal {
+  0%, 100% { opacity: 0; }
+  12%, 68% { opacity: 1; }
+}
+

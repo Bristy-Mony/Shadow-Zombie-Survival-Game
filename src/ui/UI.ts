@@ -20,6 +20,7 @@ export class UI {
   private batteryPanel!: HTMLElement;
   private dangerText!: HTMLElement;
   private crosshair!: HTMLElement;
+  private chapter!: HTMLElement;
   private danger!: HTMLElement;
   private prompt!: HTMLElement;
   private toast!: HTMLElement;
@@ -28,6 +29,7 @@ export class UI {
   private hud!: HTMLElement;
   private overlays!: HTMLElement;
   private toastFrame = 0;
+  private chapterFrame = 0;
   onStart?: () => void;
   onResume?: () => void;
   onRestart?: () => void;
@@ -73,6 +75,7 @@ export class UI {
         <section id="victory" class="screen panel-screen victory"><div class="modal"><p class="kicker">EVACUATION COMPLETE</p><h2>YOU ESCAPED<br>THE SHADOW ZONE</h2><div id="stats" class="stats"></div><button data-action="restart">PLAY AGAIN</button><button class="ghost" data-action="menu">MAIN MENU</button></div></section>
         <div id="tutorial"><span><kbd>WASD</kbd> MOVE</span><span><kbd>MOUSE</kbd> AIM</span><span><kbd>LMB</kbd> FIRE</span><span><kbd>F</kbd> FLASHLIGHT</span><span><kbd>E</kbd> INTERACT</span><b>FLASHLIGHT FREEZES · LASER KILLS</b></div>
       </div>
+      <div id="chapter-banner"><span></span><strong></strong><small></small></div>
       <div class="mobile-warning">Shadow Zombie is designed for keyboard and mouse.<br>For the best experience, use a desktop browser.</div>`;
     this.canvasHost = this.root.querySelector('#canvas-host')!;
     this.objective = this.root.querySelector('#objective')!; this.progress = this.root.querySelector('#progress')!;
@@ -81,6 +84,7 @@ export class UI {
     this.energyFill = this.root.querySelector('.weapon-panel i')!; this.energyText = this.root.querySelector('#energy-text')!; this.coinText = this.root.querySelector('#coin-text')!;
     this.healthText = this.root.querySelector('.health b')!; this.staminaText = this.root.querySelector('.stamina b')!; this.batteryPanel = this.root.querySelector('.battery-panel')!;
     this.dangerText = this.danger.querySelector('strong')!; this.crosshair = this.root.querySelector('.crosshair')!;
+    this.chapter = this.root.querySelector('#chapter-banner')!;
     this.toast = this.root.querySelector('#toast')!; this.damage = this.root.querySelector('#damage-flash')!; this.lowHealth = this.root.querySelector('#low-health')!;
     this.hud = this.root.querySelector('#hud')!; this.overlays = this.root.querySelector('#overlays')!;
     this.bind();
@@ -153,6 +157,13 @@ export class UI {
     window.setTimeout(() => { this.crosshair.className = 'crosshair'; }, 120);
   }
   showTutorial() { const el = this.root.querySelector('#tutorial')!; el.classList.add('show'); window.setTimeout(() => el.classList.remove('show'), 6200); }
+  showChapter(level: number, title: string, detail: string) {
+    this.chapter.querySelector('span')!.textContent = `LEVEL ${level}`;
+    this.chapter.querySelector('strong')!.textContent = title;
+    this.chapter.querySelector('small')!.textContent = detail;
+    this.chapter.classList.remove('show'); cancelAnimationFrame(this.chapterFrame);
+    this.chapterFrame = requestAnimationFrame(() => this.chapter.classList.add('show'));
+  }
   setVictoryStats(time: number, player: Player, stunned: number) {
     const min = Math.floor(time / 60); const sec = Math.floor(time % 60).toString().padStart(2, '0');
     this.root.querySelector('#stats')!.innerHTML = `<span><small>TIME</small><b>${min}:${sec}</b></span><span><small>HEALTH</small><b>${Math.ceil(player.health)}</b></span><span><small>CELLS</small><b>${player.energy}</b></span><span><small>STUNS</small><b>${stunned}</b></span>`;

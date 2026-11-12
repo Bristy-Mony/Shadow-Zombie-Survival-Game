@@ -13,11 +13,22 @@ export class EnemyManager {
   onZombieKilled?: (zombie: Zombie, headshot: boolean) => void;
   private lastHealth = 100;
 
-  constructor(private readonly scene: THREE.Scene, spawnPoints: THREE.Vector3[], private readonly triggers: THREE.Vector3[], exposure: LightExposureSystem, collision: CollisionSystem) {
+  constructor(private readonly scene: THREE.Scene, spawnPoints: THREE.Vector3[], private readonly triggers: THREE.Vector3[], private readonly exposure: LightExposureSystem, private readonly collision: CollisionSystem) {
     spawnPoints.slice(0, CONFIG.enemy.population).forEach((point, index) => {
       const zombie = new Zombie(false, point.clone(), exposure, collision, index % 3); zombie.onDied = (dead, headshot) => this.onZombieKilled?.(dead, headshot); scene.add(zombie.object); this.zombies.push(zombie);
     });
     triggers.forEach((point) => { const zombie = new Zombie(true, point.clone(), exposure, collision, 3); zombie.onDied = (dead, headshot) => this.onZombieKilled?.(dead, headshot); scene.add(zombie.object); this.zombies.push(zombie); });
+  }
+
+  spawnWave(points: THREE.Vector3[]) {
+    const spawned = points.map((point, index) => {
+      const zombie = new Zombie(index === points.length - 1, point.clone(), this.exposure, this.collision, index % 3);
+      zombie.object.userData.campaignWave = true;
+      zombie.onDied = (dead, headshot) => this.onZombieKilled?.(dead, headshot);
+      if (zombie.shadow) zombie.emerge();
+      this.scene.add(zombie.object); this.zombies.push(zombie); return zombie;
+    });
+    return spawned.length;
   }
 
   update(dt: number, player: Player, active: boolean) {
