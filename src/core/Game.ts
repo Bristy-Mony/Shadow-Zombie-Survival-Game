@@ -145,7 +145,7 @@ export class Game {
       item.active = false; this.world.activatePower(); this.objectives.restorePower(); this.audio.power(); this.audio.startHum();
     } else if (item.kind === 'gate') {
       if (this.objectives.stage !== 'GATE_ONE') { this.ui.notify('GATE OFFLINE', 'Restore district power first'); return; }
-      this.world.openGate(); item.active = false; this.audio.power(); this.ui.notify('CHECKPOINT OPEN', 'Cross the gate to enter Level 2');
+      this.world.openGate(); item.active = false; this.audio.power(); this.startLevelTwo();
     } else if (item.kind === 'relay') {
       if (this.objectives.stage !== 'RELAY') return;
       this.world.activateExtractionRelay(); this.objectives.activateRelay(); this.audio.power(); this.ui.notify('FINAL GATE OPENING', 'Continue down the extraction road');
@@ -257,13 +257,7 @@ export class Game {
     this.updateHud(dt, playerExposure);
     if (this.lastFlashlightState !== this.player.flashlightOn) { this.audio.flashlight(); this.lastFlashlightState = this.player.flashlightOn; }
     if (this.player.health <= 0) { this.state = GameState.GAME_OVER; document.exitPointerLock?.(); this.ui.setState(this.state); }
-    if (this.objectives.stage === 'GATE_ONE' && !this.world.interactables.find((item) => item.kind === 'gate')!.active && this.player.object.position.z < -43) {
-      const waveSize = this.enemies.spawnWave([
-        new THREE.Vector3(-4.8, 0, -51), new THREE.Vector3(4.6, 0, -55), new THREE.Vector3(0.5, 0, -60),
-      ]);
-      this.objectives.beginPurge(waveSize); this.ui.notify('LEVEL 2 · CONTAINMENT', 'A new infected wave blocks the extraction road');
-      this.ui.showChapter(2, 'CONTAINMENT', 'Eliminate the infected wave blocking the road');
-    }
+    if (this.objectives.stage === 'GATE_ONE' && !this.world.interactables.find((item) => item.kind === 'gate')!.active) this.startLevelTwo();
     if (this.objectives.stage === 'FINAL_GATE' && this.player.object.position.z < -85) {
       this.objectives.reachVehicle(); this.world.showEscapeVehicle(); this.ui.showChapter(4, 'EXTRACTION', 'Enter the armored vehicle and drive to safety'); this.ui.notify('EXTRACTION VEHICLE LOCATED', 'Approach the driver door and press E');
     }
@@ -273,6 +267,16 @@ export class Game {
     this.hudElapsed += dt;
     if (this.hudElapsed < 1 / 30) return;
     this.hudElapsed = 0; this.ui.update(this.player, this.objectives, exposure);
+  }
+
+  private startLevelTwo() {
+    if (this.objectives.stage !== 'GATE_ONE') return;
+    const waveSize = this.enemies.spawnWave([
+      new THREE.Vector3(-4.8, 0, -51), new THREE.Vector3(4.6, 0, -55), new THREE.Vector3(0.5, 0, -60),
+    ]);
+    this.objectives.beginPurge(waveSize);
+    this.ui.showChapter(2, 'CONTAINMENT', 'Eliminate the infected wave blocking the road');
+    this.ui.notify('LEVEL 2 · CONTAINMENT', 'Checkpoint breached · eliminate all marked infected');
   }
 
   private loop = () => {
