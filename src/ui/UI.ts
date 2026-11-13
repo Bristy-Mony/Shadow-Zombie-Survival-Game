@@ -67,7 +67,7 @@ export class UI {
         </main>
         <section id="how" class="screen panel-screen">
           <div class="modal"><p class="kicker">FIELD BRIEFING</p><h2>THE DARKNESS HUNTS</h2>
-            <p>Your flashlight freezes only the infected caught inside its beam; move the light away and they immediately resume the hunt. Aim the laser weapon and fire; headshots deal extra damage. Complete four staged objectives, enter the extraction vehicle, and drive to safety.</p>
+            <p>Your flashlight freezes only the infected caught inside its beam; move the light away and they immediately resume the hunt. Aim the laser weapon and fire; headshots deal extra damage. Complete five campaign levels, enter the extraction vehicle, and drive to safety.</p>
             <div class="controls"><span><kbd>WASD</kbd> Move</span><span><kbd>MOUSE</kbd> Look / Fire</span><span><kbd>SHIFT</kbd> Sprint</span><span><kbd>F</kbd> Flashlight</span><span><kbd>E</kbd> Interact</span><span><kbd>ESC</kbd> Pause</span></div>
             <button data-action="back">BACK</button>
           </div>

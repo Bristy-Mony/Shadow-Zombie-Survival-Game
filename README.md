@@ -10,7 +10,7 @@ The flashlight controls space by slowing, repelling, and briefly stunning infect
 
 ## Objective
 
-Recover three power fuses from the district, install them in the central generator, then follow the newly powered streetlights to the evacuation gate and enter the safe zone.
+Complete the five-level campaign: recover three fuses and restore the generator, clear the containment wave, activate the blackout relay, cross the final evacuation gate, enter the armored vehicle, and drive beyond the quarantine zone.
 
 ## Controls
 
@@ -40,7 +40,7 @@ Click the game canvas to recapture the mouse after it has been released.
 - Fuse, battery, and medical pickups plus an optional floodlight breaker
 - Generator power-up sequence, evacuation gate, victory, death, pause, and in-place restart
 - Pixabay horror soundtrack with adaptive proximity crossfades, an original procedural suspense layer, plus CC0 laser, impact, and zombie approach/attack/death effects
-- Four playable campaign levels: power restoration, a dedicated containment wave, extraction relay/final gate, and an animated vehicle escape
+- Five playable campaign levels: power restoration, containment, blackout relay, final-gate extraction, and an animated vehicle escape drive
 - Responsive renderer with capped pixel ratio
 - Rigged Quaternius humanoid characters with blended idle, walk, jog, sprint, hit, and attack animations
 - ACES tone mapping and selective bloom for cinematic light response

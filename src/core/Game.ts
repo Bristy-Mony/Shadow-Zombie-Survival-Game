@@ -51,6 +51,7 @@ export class Game {
   private readonly shotEffects: ShotEffect[] = [];
   private shotCursor = 0;
   private hudElapsed = 1;
+  private objectiveBeaconTimer = 0;
   private zombieVoiceTimer = 4;
   private vehicleMode: 'FOOT' | 'ENTERING' | 'DRIVING' | 'EXITING' = 'FOOT';
   onRestartRequested?: (startImmediately: boolean) => void;
@@ -110,12 +111,14 @@ export class Game {
     this.enemies.onPlayerHit = () => { this.ui.damageFlash(); this.audio.zombieAttack(); };
     this.enemies.onZombieKilled = (zombie, headshot) => {
       this.loot.spawn(zombie.object.position); this.audio.zombieDie();
+      let campaignAdvanced = false;
       if (zombie.object.userData.campaignWave && this.objectives.recordKill()) {
+        campaignAdvanced = true;
         this.world.showExtractionRelay();
         this.ui.showChapter(3, 'BLACKOUT RELAY', 'Activate the relay and open the final gate');
         this.ui.notify('LEVEL 3 UNLOCKED', 'Follow the blue road lights to the extraction relay');
       }
-      if (headshot) this.ui.notify('HEADSHOT', 'Infected neutralized');
+      if (headshot && !campaignAdvanced) this.ui.notify('HEADSHOT', 'Infected neutralized');
     };
     this.loot.onPickup = (kind, value) => {
       this.audio.pickup(); this.ui.updateCoinBalance(this.progression);
@@ -148,7 +151,9 @@ export class Game {
       this.world.openGate(); item.active = false; this.audio.power(); this.startLevelTwo();
     } else if (item.kind === 'relay') {
       if (this.objectives.stage !== 'RELAY') return;
-      this.world.activateExtractionRelay(); this.objectives.activateRelay(); this.audio.power(); this.ui.notify('FINAL GATE OPENING', 'Continue down the extraction road');
+      this.world.activateExtractionRelay(); this.objectives.activateRelay(); this.audio.power();
+      this.ui.showChapter(4, 'FINAL RUN', 'Cross the evacuation gate and reach the armored vehicle');
+      this.ui.notify('FINAL GATE OPENING', 'Follow the objective beacon down the extraction road');
     } else if (item.kind === 'car') {
       if (this.objectives.stage !== 'CAR') return;
       this.vehicleMode = 'ENTERING'; item.active = false; this.player.beginVehicleEntry(); this.audio.power();
@@ -220,9 +225,12 @@ export class Game {
     this.enemies.update(dt, this.player, onFoot);
     this.loot.update(dt, this.player, onFoot); this.updateShotEffects(dt);
     if (!active) return;
+    this.updateObjectiveBeacon(dt);
     if (this.vehicleMode === 'ENTERING') {
       if (this.player.updateVehicleEntry(dt, this.world.escapeCar)) {
         this.vehicleMode = 'DRIVING'; this.world.beginDriving(); this.objectives.enterVehicle();
+        this.ui.showChapter(5, 'ESCAPE DRIVE', 'Hold W to accelerate · use A/D to steer');
+        this.ui.notify('LEVEL 5 · BREAKOUT', 'Drive the armored vehicle beyond the quarantine zone');
       }
       this.audio.updateThreat(Number.POSITIVE_INFINITY, dt, true); this.updateHud(dt, 1); return;
     }
@@ -259,7 +267,7 @@ export class Game {
     if (this.player.health <= 0) { this.state = GameState.GAME_OVER; document.exitPointerLock?.(); this.ui.setState(this.state); }
     if (this.objectives.stage === 'GATE_ONE' && !this.world.interactables.find((item) => item.kind === 'gate')!.active) this.startLevelTwo();
     if (this.objectives.stage === 'FINAL_GATE' && this.player.object.position.z < -85) {
-      this.objectives.reachVehicle(); this.world.showEscapeVehicle(); this.ui.showChapter(4, 'EXTRACTION', 'Enter the armored vehicle and drive to safety'); this.ui.notify('EXTRACTION VEHICLE LOCATED', 'Approach the driver door and press E');
+      this.objectives.reachVehicle(); this.world.showEscapeVehicle(); this.ui.notify('EXTRACTION VEHICLE LOCATED', 'Approach the driver door and press E');
     }
   }
 
@@ -277,6 +285,33 @@ export class Game {
     this.objectives.beginPurge(waveSize);
     this.ui.showChapter(2, 'CONTAINMENT', 'Eliminate the infected wave blocking the road');
     this.ui.notify('LEVEL 2 · CONTAINMENT', 'Checkpoint breached · eliminate all marked infected');
+  }
+
+  private updateObjectiveBeacon(dt: number) {
+    this.objectiveBeaconTimer -= dt;
+    if (this.objectiveBeaconTimer > 0) return;
+    this.objectiveBeaconTimer = 0.2;
+    let target: THREE.Vector3 | undefined;
+    if (this.objectives.stage === 'FUSES') {
+      let nearest = Number.POSITIVE_INFINITY;
+      for (const item of this.world.interactables) {
+        if (!item.active || item.kind !== 'fuse') continue;
+        const distance = item.object.position.distanceToSquared(this.player.object.position);
+        if (distance < nearest) { nearest = distance; target = item.object.position; }
+      }
+    } else if (this.objectives.stage === 'GENERATOR') target = this.world.generatorPosition;
+    else if (this.objectives.stage === 'GATE_ONE') target = this.world.gatePosition;
+    else if (this.objectives.stage === 'PURGE') {
+      let nearest = Number.POSITIVE_INFINITY;
+      for (const zombie of this.enemies.alive) {
+        if (!zombie.object.userData.campaignWave) continue;
+        const distance = zombie.object.position.distanceToSquared(this.player.object.position);
+        if (distance < nearest) { nearest = distance; target = zombie.object.position; }
+      }
+    } else if (this.objectives.stage === 'RELAY') target = this.world.relayPosition;
+    else if (this.objectives.stage === 'FINAL_GATE') target = this.world.finalGatePosition;
+    else if (this.objectives.stage === 'CAR') target = this.world.escapeCar.position;
+    this.world.setObjectiveTarget(target);
   }
 
   private loop = () => {

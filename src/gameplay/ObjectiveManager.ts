@@ -12,8 +12,9 @@ export class ObjectiveManager {
   get level() {
     if (this.stage === 'FUSES' || this.stage === 'GENERATOR' || this.stage === 'GATE_ONE') return 1;
     if (this.stage === 'PURGE') return 2;
-    if (this.stage === 'RELAY' || this.stage === 'FINAL_GATE') return 3;
-    return 4;
+    if (this.stage === 'RELAY') return 3;
+    if (this.stage === 'FINAL_GATE' || this.stage === 'CAR') return 4;
+    return 5;
   }
 
   get title() {
@@ -22,9 +23,9 @@ export class ObjectiveManager {
     if (this.stage === 'GATE_ONE') return 'Level 1 · Open Checkpoint Gate';
     if (this.stage === 'PURGE') return 'Level 2 · Clear the Infected';
     if (this.stage === 'RELAY') return 'Level 3 · Activate Extraction Relay';
-    if (this.stage === 'FINAL_GATE') return 'Level 3 · Reach Final Gate';
+    if (this.stage === 'FINAL_GATE') return 'Level 4 · Cross Final Gate';
     if (this.stage === 'CAR') return 'Level 4 · Enter Escape Vehicle';
-    if (this.stage === 'DRIVE') return 'Level 4 · Drive to Safety';
+    if (this.stage === 'DRIVE') return 'Level 5 · Drive to Safety';
     return 'Evacuation Complete';
   }
   get progress() {

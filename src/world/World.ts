@@ -24,7 +24,10 @@ export class World {
   readonly shadowTriggers = [new THREE.Vector3(-25, 0, 8), new THREE.Vector3(21, 0, -19)];
   readonly generatorPosition = new THREE.Vector3(24, 0, -27);
   readonly gatePosition = new THREE.Vector3(0, 0, -38);
+  readonly relayPosition = new THREE.Vector3(-6.7, 0, -65);
+  readonly finalGatePosition = new THREE.Vector3(0, 0, -82);
   readonly escapeCar = new THREE.Group();
+  private readonly objectiveBeacon = new THREE.Group();
   private dust!: THREE.Points;
   private sparks!: THREE.Points;
   private sparkLife = 0;
@@ -51,6 +54,7 @@ export class World {
     this.buildGate();
     this.buildEscapeRoute();
     this.buildParticles();
+    this.buildObjectiveBeacon();
   }
 
   private material(color: number, roughness = 0.88, metalness = 0.05) {
@@ -384,6 +388,18 @@ export class World {
     this.sparks.position.copy(this.generatorPosition).add(new THREE.Vector3(0, 2.5, 0)); this.group.add(this.sparks);
   }
 
+  private buildObjectiveBeacon() {
+    const ringMaterial = new THREE.MeshBasicMaterial({ color: 0x6cebf2, transparent: true, opacity: 0.78, depthTest: false, depthWrite: false });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.055, 8, 24), ringMaterial); ring.rotation.x = Math.PI / 2;
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.12, 3.4, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0x58dce8, transparent: true, opacity: 0.22, depthTest: false, depthWrite: false, side: THREE.DoubleSide }));
+    beam.position.y = 1.75; this.objectiveBeacon.add(ring, beam); this.objectiveBeacon.visible = false; this.objectiveBeacon.renderOrder = 20; this.group.add(this.objectiveBeacon);
+  }
+
+  setObjectiveTarget(position?: THREE.Vector3) {
+    this.objectiveBeacon.visible = !!position;
+    if (position) this.objectiveBeacon.position.set(position.x, 0.18, position.z);
+  }
+
   activatePower() {
     this.powerOn = true; this.powerActivatedAt = this.elapsed; this.sparkLife = 4;
     const gate = this.interactables.find((i) => i.kind === 'gate')!;
@@ -418,6 +434,10 @@ export class World {
     const finalGateObj = (this.interactables.find((i) => i.kind === 'final-gate')!.object.userData.gate as THREE.Mesh);
     if (finalGateObj.userData.open) finalGateObj.position.y = Math.min(5.3, finalGateObj.position.y + dt * 2.3);
     this.dust.rotation.y += dt * 0.006;
+    if (this.objectiveBeacon.visible) {
+      this.objectiveBeacon.rotation.y += dt * 1.4;
+      this.objectiveBeacon.children[0].position.y = Math.sin(this.elapsed * 2.4) * 0.12;
+    }
     if (this.sparkLife > 0) {
       this.sparkLife -= dt; const a = this.sparks.geometry.attributes.position as THREE.BufferAttribute;
       for (let i = 0; i < a.count; i++) { a.setXYZ(i, (Math.random() - 0.5) * 3, Math.random() * 2 - 0.8, (Math.random() - 0.5) * 2); }
