@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shadow Zombie — Light-Based Survival</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">☼</div>
+        <div><h1>SHADOW <span>ZOMBIE</span></h1><p>A light-based survival game</p></div>
+      </div>
+      <div class="top-actions">
+        <span class="status-dot"></span><span id="statusText">SYSTEM READY</span>
+        <button id="soundBtn" class="icon-btn" title="Toggle sound" aria-label="Toggle sound">♫</button>
+      </div>
+    </header>
+
+    <section class="game-layout">
+      <div class="game-column">
+        <div class="game-heading">
+          <div><p class="eyebrow">NIGHT SHIFT / SECTOR 07</p><h2>Survive the darkness.</h2></div>
+          <div class="level-pill"><span class="pulse"></span> NIGHT <b id="level">01</b></div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="gameCanvas" width="1000" height="600" aria-label="Shadow Zombie game area"></canvas>
+          <div class="overlay" id="startOverlay">
+            <div class="overlay-card">
+              <div class="big-icon">☼</div>
+              <p class="eyebrow">THE NIGHT IS HUNGRY</p>
+              <h2>Don't let the shadows<br/><em>find you.</em></h2>
+              <p>Use your flashlight to slow the dead, then hold the left mouse button to aim and fire. The red laser appears only while you are firing. Collect batteries and ammo to survive.</p>
+              <button id="startBtn" class="primary-btn">▶ &nbsp; START SURVIVING</button>
+              <small>WASD / ARROWS to move · Hold LEFT CLICK to aim & fire · SPACE flashlight · R reload</small>
+            </div>
+          </div>
+          <div class="game-over hidden" id="gameOver">
+            <p class="eyebrow">SIGNAL LOST</p><h2 id="endTitle">YOU WERE OVERRUN</h2>
+            <p>Survival score <strong id="finalScore">0</strong></p>
+            <button id="restartBtn" class="primary-btn">↻ &nbsp; TRY AGAIN</button>
+          </div>
+          <div class="canvas-hint" id="canvasHint">RED LASER: APPEARS WHILE FIRING · SPACE: FLASHLIGHT</div>
+        </div>
+        <div class="controls-row">
+          <div><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><span>MOVE</span></div>
+          <div><kbd>🖱</kbd><span>AIM &amp; FIRE</span></div>
+          <div><kbd>SPACE</kbd><span>FLASHLIGHT</span></div>
+          <div><kbd>R</kbd><span>RELOAD</span></div>
+          <div><kbd>SHIFT</kbd><span>SPRINT</span></div>
+        </div>
+      </div>
+
+      <aside class="sidebar">
+        <section class="panel stats-panel">
+          <div class="panel-title"><span>▤ &nbsp; SURVIVAL STATUS</span><span class="live-label">LIVE</span></div>
+          <div class="health-head"><span>HEALTH</span><strong id="healthText">100%</strong></div>
+          <div class="health-bar"><div id="healthBar"></div></div>
+          <div class="life-row" id="lifeRow"><span>♥</span><span>♥</span><span>♥</span><small>3 LIVES</small></div>
+          <div class="stat-grid">
+            <div class="stat-card"><span class="stat-icon">◷</span><small>SURVIVAL TIME</small><strong id="timeStat">00:00</strong></div>
+            <div class="stat-card"><span class="stat-icon">✧</span><small>SCORE</small><strong id="scoreStat">0000</strong></div>
+          </div>
+          <div class="battery-head"><span>FLASHLIGHT ENERGY</span><strong id="batteryText">100%</strong></div>
+          <div class="battery-bar"><div id="batteryBar"></div></div>
+          <div class="battery-note"><span class="battery-symbol">▰</span> Find glowing batteries to recharge</div>
+          <div class="ammo-head"><span>SIDEARM AMMO</span><strong id="ammoText">12 / 72</strong></div>
+          <div class="ammo-bar"><div id="ammoBar"></div></div>
+          <div class="ammo-note" id="ammoNote">Press R to reload · Collect blue ammo crates</div>
+        </section>
+
+        <section class="panel objective-panel">
+          <div class="panel-title"><span>⌖ &nbsp; CURRENT OBJECTIVE</span></div>
+          <div class="objective-icon">◎</div>
+          <h3>Light up. Lock on. Survive.</h3>
+          <p>Hold the left mouse button to aim and shoot zombies. The red laser sight is visible only while the button is held. Press Space to switch the flashlight beam on or off.</p>
+          <div class="objective-progress"><span id="objectiveText">0 / 5 batteries</span><div><i id="objectiveBar"></i></div></div>
+        </section>
+
+        <section class="panel intel-panel">
+          <div class="panel-title"><span>⌁ &nbsp; FIELD INTEL</span></div>
+          <div class="intel-row"><span class="intel-dot zombie-dot"></span><span>Shadow zombie</span><b>HOSTILE</b></div>
+          <div class="intel-row"><span class="intel-dot battery-dot"></span><span>Energy cell</span><b>SUPPLY</b></div>
+          <div class="intel-row"><span class="intel-dot light-dot"></span><span>Flashlight beam</span><b>DEFENSE</b></div>
+          <div class="intel-row"><span class="intel-dot laser-dot"></span><span>Laser sight / pistol</span><b>COMBAT</b></div>
+          <div class="intel-row"><span class="intel-dot ammo-dot"></span><span>Ammo crate</span><b>SUPPLY</b></div>
+        </section>
+        <button id="pauseBtn" class="secondary-btn" disabled>Ⅱ &nbsp; PAUSE GAME</button>
+      </aside>
+    </section>
+    <footer><span>SHADOW ZOMBIE <i>•</i> GUNS &amp; LASER UPDATE 2.1</span><span>HTML · CSS · JAVASCRIPT <b>◆</b></span></footer>
+  </main>
+  <script src="game.js"></script>
+</body>
+</html>
